@@ -535,12 +535,6 @@ Workers write complete implementations. Lead reviews and commits them.
 
 ---
 
-### Q: What if I'm a solo developer?
-
-Start with lead-only mode (0 workers). Add 1-2 Codex workers when you have parallelizable work. Keep it simple.
-
----
-
 ### Q: How do I know what worker pool size to use?
 
 **Start small.** Begin with lead-only or 2-3 workers. Scale up only when:
