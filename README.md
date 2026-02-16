@@ -502,21 +502,6 @@ User approval required before advancing phases. Prevents AI from racing ahead or
 
 ---
 
-## Production Validation
-
-**Extracted from:** krov - A control-plane-first personal agent runtime with governed skill execution, multi-channel messaging, and companion personalization.
-
-**Proven in:**
-- ✅ 5 phases executed (Foundation → Ship Readiness)
-- ✅ 100% test pass rate maintained
-- ✅ Multiple lead agent handoffs
-- ✅ v1 → v2 transition gated successfully
-- ✅ 100+ decision log entries
-- ✅ Worker orchestration (15-worker pool tested)
-- ✅ Multi-week gaps (context persisted)
-
----
-
 ## Anti-Patterns Prevented
 
 | Anti-Pattern        | How Framework Prevents                      |
