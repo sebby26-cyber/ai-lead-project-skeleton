@@ -42,6 +42,7 @@ Commands:
   rehydrate-db                Rebuild SQLite DB from canonical YAML
   validate                    Validate YAML against JSON schemas
   git-sync                    Commit canonical state files to git
+  migrate                     Apply new template files (non-destructive)
 
 Options:
   --help, -h                  Show this help message
@@ -118,6 +119,10 @@ def main():
 
     elif command == "git-sync":
         result = ai_run.handle_git_sync(project_root, message=flags.get("message"))
+        print(result)
+
+    elif command == "migrate":
+        result = ai_run.handle_migrate(project_root)
         print(result)
 
     else:

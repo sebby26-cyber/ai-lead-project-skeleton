@@ -74,6 +74,30 @@ def handle_validate(project_root: Path, **kwargs) -> str:
     return header + "\n" + "\n".join(lines)
 
 
+def handle_migrate(project_root: Path, **kwargs) -> str:
+    """Non-destructive template migration.
+
+    Copies new/missing template files from the skeleton into .ai/.
+    Never overwrites existing files (especially STATUS.md, DECISIONS.md, state/*).
+    """
+    skeleton_dir = ai_init.find_skeleton_dir()
+    ai_dir = project_root / ".ai"
+
+    ai_init.copy_templates(skeleton_dir, project_root)
+
+    # Re-stamp metadata with current skeleton version
+    meta = ai_init.stamp_metadata(project_root, skeleton_dir)
+
+    lines = [
+        "Migration complete (non-destructive).",
+        f"  Skeleton version: {meta.get('skeleton_version', 'unknown')}",
+        "  New template files added (if any were missing).",
+        "  Existing files were NOT overwritten.",
+        "  Run 'ai validate' to check schema compliance.",
+    ]
+    return "\n".join(lines)
+
+
 def handle_git_sync(project_root: Path, message: str | None = None, **kwargs) -> str:
     # First render status to update STATUS.md
     ai_dir = project_root / ".ai"
@@ -93,6 +117,7 @@ HANDLERS = {
     "handle_rehydrate_db": handle_rehydrate_db,
     "handle_validate": handle_validate,
     "handle_git_sync": handle_git_sync,
+    "handle_migrate": handle_migrate,
 }
 
 
