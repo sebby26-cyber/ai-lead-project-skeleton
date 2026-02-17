@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "AI Team Configuration",
+  "type": "object",
+  "required": ["orchestrator", "roles"],
+  "properties": {
+    "orchestrator": {
+      "type": "object",
+      "required": ["role_id", "title"],
+      "properties": {
+        "role_id": { "type": "string" },
+        "title": { "type": "string" },
+        "authority": { "type": "string", "enum": ["write", "read", "review"] }
+      }
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role_id", "title", "department"],
+        "properties": {
+          "role_id": { "type": "string" },
+          "title": { "type": "string" },
+          "department": { "type": "string" },
+          "reports_to": { "type": "string" },
+          "authority": {
+            "type": "string",
+            "enum": ["read", "write", "review"],
+            "default": "read"
+          },
+          "workers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "provider", "model"],
+              "properties": {
+                "id": { "type": "string" },
+                "provider": { "type": "string" },
+                "model": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

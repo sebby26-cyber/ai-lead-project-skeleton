@@ -1,0 +1,377 @@
+#!/usr/bin/env python3
+"""
+self_check.py — Sanity checks for the AI Team Skeleton engine.
+
+Runs basic tests to verify core functionality:
+  1. Project root detection
+  2. Init creates required dirs/files
+  3. DB creation + ingest works
+  4. Export/import pack roundtrip works
+  5. Git-sync only commits whitelisted files
+
+Usage:
+    python engine/self_check.py
+"""
+
+import json
+import os
+import shutil
+import sqlite3
+import sys
+import tempfile
+import uuid
+from pathlib import Path
+
+# Setup imports
+engine_dir = os.path.dirname(os.path.abspath(__file__))
+skeleton_dir = os.path.dirname(engine_dir)
+if skeleton_dir not in sys.path:
+    sys.path.insert(0, skeleton_dir)
+
+passed = 0
+failed = 0
+errors = []
+
+
+def check(name, func):
+    global passed, failed
+    try:
+        func()
+        passed += 1
+        print(f"  PASS  {name}")
+    except Exception as e:
+        failed += 1
+        errors.append((name, str(e)))
+        print(f"  FAIL  {name}: {e}")
+
+
+def make_test_project() -> Path:
+    """Create a temporary git repo with skeleton templates copied in."""
+    import subprocess
+
+    tmpdir = Path(tempfile.mkdtemp(prefix="ai_selfcheck_")).resolve()
+    subprocess.run(["git", "init", str(tmpdir)], capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=str(tmpdir), capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=str(tmpdir), capture_output=True,
+    )
+    # Create an initial commit so git operations work
+    (tmpdir / "README.md").write_text("# Test\n")
+    subprocess.run(["git", "add", "."], cwd=str(tmpdir), capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "init"],
+        cwd=str(tmpdir), capture_output=True,
+    )
+    return tmpdir
+
+
+# ─── Test 1: Project root detection ───
+
+def test_project_root_detection():
+    from engine.ai_git import find_project_root
+
+    tmpdir = make_test_project()
+    try:
+        # From root
+        root = find_project_root(tmpdir)
+        assert root == tmpdir, f"Expected {tmpdir}, got {root}"
+
+        # From subdirectory
+        subdir = tmpdir / "sub" / "deep"
+        subdir.mkdir(parents=True)
+        root2 = find_project_root(subdir)
+        assert root2 == tmpdir, f"Expected {tmpdir}, got {root2}"
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 2: Init creates required dirs/files ───
+
+def test_init_creates_structure():
+    from engine.ai_init import copy_templates, setup_runtime, stamp_metadata
+
+    tmpdir = make_test_project()
+    skel = Path(skeleton_dir)
+    try:
+        copy_templates(skel, tmpdir)
+        setup_runtime(tmpdir)
+        stamp_metadata(tmpdir, skel)
+
+        ai_dir = tmpdir / ".ai"
+        runtime_dir = tmpdir / ".ai_runtime"
+
+        # Check required files exist
+        assert ai_dir.is_dir(), ".ai/ not created"
+        assert (ai_dir / "state" / "team.yaml").exists(), "team.yaml missing"
+        assert (ai_dir / "state" / "board.yaml").exists(), "board.yaml missing"
+        assert (ai_dir / "state" / "approvals.yaml").exists(), "approvals.yaml missing"
+        assert (ai_dir / "state" / "commands.yaml").exists(), "commands.yaml missing"
+        assert (ai_dir / "METADATA.yaml").exists(), "METADATA.yaml missing"
+        assert (ai_dir / "STATUS.md").exists(), "STATUS.md missing"
+        assert (ai_dir / "DECISIONS.md").exists(), "DECISIONS.md missing"
+        assert (ai_dir / "RUNBOOK.md").exists(), "RUNBOOK.md missing"
+        assert (ai_dir / "core" / "AUTHORITY_MODEL.md").exists(), "AUTHORITY_MODEL.md missing"
+        assert (ai_dir / "core" / "WORKER_EXECUTION_RULES.md").exists()
+        assert (ai_dir / "prompts" / "orchestrator_system.md").exists()
+        assert runtime_dir.is_dir(), ".ai_runtime/ not created"
+        assert (runtime_dir / "logs").is_dir(), "logs/ not created"
+        assert (runtime_dir / "session").is_dir(), "session/ not created"
+
+        # Check metadata was stamped
+        import yaml
+        meta = yaml.safe_load((ai_dir / "METADATA.yaml").read_text())
+        assert meta.get("project_id") != "PLACEHOLDER", "project_id not stamped"
+        assert meta.get("skeleton_version") not in (None, "PLACEHOLDER"), "version not stamped"
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 3: DB creation + ingest ───
+
+def test_db_creation_and_ingest():
+    from engine.ai_db import connect_db, create_db, get_snapshot, set_snapshot
+    from engine.ai_init import copy_templates, setup_runtime
+    from engine.ai_state import reconcile
+
+    tmpdir = make_test_project()
+    skel = Path(skeleton_dir)
+    try:
+        copy_templates(skel, tmpdir)
+        setup_runtime(tmpdir)
+
+        ai_dir = tmpdir / ".ai"
+        runtime_dir = tmpdir / ".ai_runtime"
+
+        # Reconcile should create DB and ingest
+        updated = reconcile(ai_dir, runtime_dir)
+        assert updated, "Expected reconcile to update DB on first run"
+
+        # DB should exist
+        db_path = runtime_dir / "ai.db"
+        assert db_path.exists(), "ai.db not created"
+
+        # Check tables have data
+        conn = connect_db(runtime_dir)
+        workers = conn.execute("SELECT COUNT(*) FROM workers").fetchone()[0]
+        assert workers > 0, f"Expected workers in DB, got {workers}"
+
+        # Check snapshot was stored
+        h = get_snapshot(conn, "canonical_hash")
+        assert h is not None, "canonical_hash not stored"
+
+        # Second reconcile should be no-op
+        conn.close()
+        updated2 = reconcile(ai_dir, runtime_dir)
+        assert not updated2, "Expected reconcile to be no-op (no changes)"
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 4: Export/import roundtrip ───
+
+def test_export_import_roundtrip():
+    from engine.ai_init import copy_templates, setup_runtime, stamp_metadata
+    from engine.ai_memory import export_memory, import_memory
+    from engine.ai_state import reconcile
+    from engine.ai_db import connect_db, add_event
+
+    tmpdir = make_test_project()
+    skel = Path(skeleton_dir)
+    try:
+        copy_templates(skel, tmpdir)
+        setup_runtime(tmpdir)
+        stamp_metadata(tmpdir, skel)
+
+        ai_dir = tmpdir / ".ai"
+        runtime_dir = tmpdir / ".ai_runtime"
+        reconcile(ai_dir, runtime_dir)
+
+        # Add some events
+        conn = connect_db(runtime_dir)
+        add_event(conn, "test", "test_event", {"key": "value"})
+        add_event(conn, "test", "another_event", {"num": 42})
+        conn.close()
+
+        # Export
+        pack_path = export_memory(ai_dir, runtime_dir, "test-version")
+        assert Path(pack_path).is_dir(), "Pack directory not created"
+        assert (Path(pack_path) / "manifest.json").exists(), "manifest.json missing"
+        assert (Path(pack_path) / "events.jsonl").exists(), "events.jsonl missing"
+
+        # Check manifest
+        manifest = json.loads((Path(pack_path) / "manifest.json").read_text())
+        assert manifest["version"] == "1.0"
+        assert manifest["skeleton_version"] == "test-version"
+
+        # Export as zip
+        zip_path = str(tmpdir / "test_pack.zip")
+        zip_result = export_memory(ai_dir, runtime_dir, "test-version", zip_path)
+        assert Path(zip_result).exists(), "Zip not created"
+
+        # Import into fresh runtime
+        runtime_dir2 = tmpdir / ".ai_runtime2"
+        runtime_dir2.mkdir()
+        # Temporarily swap runtime dir
+        result = import_memory(ai_dir, runtime_dir2, pack_path)
+        assert "Imported" in result, f"Import failed: {result}"
+        assert "events" in result.lower()
+
+        # Verify events were imported
+        conn2 = connect_db(runtime_dir2)
+        count = conn2.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        assert count >= 2, f"Expected >= 2 events, got {count}"
+        conn2.close()
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 5: Git-sync only commits whitelisted files ───
+
+def test_git_sync_whitelist():
+    import subprocess
+    from engine.ai_git import git_sync, ensure_gitignore
+    from engine.ai_init import copy_templates, setup_runtime, stamp_metadata
+    from engine.ai_state import reconcile
+
+    tmpdir = make_test_project()
+    skel = Path(skeleton_dir)
+    try:
+        copy_templates(skel, tmpdir)
+        setup_runtime(tmpdir)
+        stamp_metadata(tmpdir, skel)
+        ensure_gitignore(tmpdir)
+        reconcile(tmpdir / ".ai", tmpdir / ".ai_runtime")
+
+        # Create a non-ai file that should NOT be committed
+        (tmpdir / "secret.txt").write_text("should not be committed")
+
+        # Create a runtime file that should NOT be committed
+        (tmpdir / ".ai_runtime" / "test.log").write_text("runtime log")
+
+        success, msg = git_sync(tmpdir)
+
+        # Check that secret.txt and .ai_runtime were NOT committed
+        result = subprocess.run(
+            ["git", "log", "--oneline", "--name-only", "-1"],
+            cwd=str(tmpdir), capture_output=True, text=True,
+        )
+        committed_files = result.stdout
+
+        assert "secret.txt" not in committed_files, "secret.txt was committed!"
+        assert ".ai_runtime" not in committed_files, ".ai_runtime was committed!"
+
+        if success:
+            # Verify canonical files were committed
+            assert ".ai/" in committed_files or ".ai/state" in committed_files, \
+                f"Canonical files not committed. Files: {committed_files}"
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 6: Validation ───
+
+def test_validation():
+    from engine.ai_init import copy_templates
+    from engine.ai_validate import validate_all
+
+    tmpdir = make_test_project()
+    skel = Path(skeleton_dir)
+    try:
+        copy_templates(skel, tmpdir)
+        results = validate_all(tmpdir / ".ai", skel / "schemas")
+        for fname, errs in results.items():
+            assert len(errs) == 0, f"Validation errors in {fname}: {errs}"
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 7: Status rendering ───
+
+def test_status_rendering():
+    from engine.ai_init import copy_templates, setup_runtime
+    from engine.ai_state import reconcile, render_status
+
+    tmpdir = make_test_project()
+    skel = Path(skeleton_dir)
+    try:
+        copy_templates(skel, tmpdir)
+        setup_runtime(tmpdir)
+        reconcile(tmpdir / ".ai", tmpdir / ".ai_runtime")
+
+        report = render_status(tmpdir / ".ai", tmpdir / ".ai_runtime")
+        assert "PROJECT STATUS" in report, "Status report missing header"
+        assert "Phase:" in report, "Status report missing phase"
+        assert "Progress:" in report, "Status report missing progress"
+
+        # Check STATUS.md was written
+        status_md = tmpdir / ".ai" / "STATUS.md"
+        assert status_md.exists(), "STATUS.md not updated"
+        content = status_md.read_text()
+        assert "# Project Status" in content
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 8: Init does not overwrite existing files ───
+
+def test_init_no_overwrite():
+    from engine.ai_init import copy_templates
+
+    tmpdir = make_test_project()
+    skel = Path(skeleton_dir)
+    try:
+        # Create a custom team.yaml first
+        ai_dir = tmpdir / ".ai" / "state"
+        ai_dir.mkdir(parents=True)
+        custom_content = "# Custom team config\norcestrator:\n  role_id: custom\n"
+        (ai_dir / "team.yaml").write_text(custom_content)
+
+        # Run copy_templates — should NOT overwrite
+        copy_templates(skel, tmpdir)
+
+        result = (ai_dir / "team.yaml").read_text()
+        assert result == custom_content, "team.yaml was overwritten!"
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Run all ───
+
+def main():
+    global passed, failed
+
+    print("\n=== AI Team Skeleton — Self Check ===\n")
+
+    # Check PyYAML
+    try:
+        import yaml
+    except ImportError:
+        print("ERROR: PyYAML is required. Install it: pip install pyyaml")
+        sys.exit(1)
+
+    check("Project root detection", test_project_root_detection)
+    check("Init creates structure", test_init_creates_structure)
+    check("DB creation + ingest", test_db_creation_and_ingest)
+    check("Export/import roundtrip", test_export_import_roundtrip)
+    check("Git-sync whitelist", test_git_sync_whitelist)
+    check("Schema validation", test_validation)
+    check("Status rendering", test_status_rendering)
+    check("Init no-overwrite", test_init_no_overwrite)
+
+    print(f"\n{'=' * 40}")
+    print(f"  Results: {passed} passed, {failed} failed")
+    if errors:
+        print("\n  Failures:")
+        for name, err in errors:
+            print(f"    {name}: {err}")
+    print(f"{'=' * 40}\n")
+
+    sys.exit(1 if failed > 0 else 0)
+
+
+if __name__ == "__main__":
+    main()

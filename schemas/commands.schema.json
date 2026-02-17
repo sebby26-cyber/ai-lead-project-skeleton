@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "AI Command Registry",
+  "type": "object",
+  "required": ["commands"],
+  "properties": {
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "handler"],
+        "properties": {
+          "name": { "type": "string" },
+          "aliases": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "handler": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}

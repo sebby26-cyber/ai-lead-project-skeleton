@@ -12,3 +12,11 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+
+# AI runtime (local cache, never committed)
+.ai_runtime/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

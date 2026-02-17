@@ -1,0 +1,41 @@
+# AI Command Registry
+# Maps command names and aliases to handler functions.
+
+commands:
+  - name: status
+    aliases:
+      - "/status"
+      - "status report"
+      - "generate status report"
+    handler: handle_status
+    description: Generate and display project status report
+
+  - name: export-memory
+    aliases:
+      - "/export-memory"
+    handler: handle_export_memory
+    description: Export memory pack for portability
+
+  - name: import-memory
+    aliases:
+      - "/import-memory"
+    handler: handle_import_memory
+    description: Import a memory pack
+
+  - name: rehydrate-db
+    aliases:
+      - "/rehydrate"
+    handler: handle_rehydrate_db
+    description: Rebuild local SQLite DB from canonical YAML state
+
+  - name: validate
+    aliases:
+      - "/validate"
+    handler: handle_validate
+    description: Validate YAML files against JSON schemas
+
+  - name: git-sync
+    aliases:
+      - "/git-sync"
+    handler: handle_git_sync
+    description: Commit canonical AI state files to git
