@@ -229,4 +229,14 @@ def _write_status_md(ai_dir, phase, columns, counts, total, done, pct, active, p
     lines.append("")
     lines.append(f"---\n*Last updated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}*")
 
-    (ai_dir / "STATUS.md").write_text("\n".join(lines) + "\n")
+    # Preserve Legacy Snapshot section if it exists in the current STATUS.md
+    status_path = ai_dir / "STATUS.md"
+    legacy_section = ""
+    if status_path.exists():
+        existing = status_path.read_text()
+        marker = "## Legacy Status Snapshot"
+        idx = existing.find(marker)
+        if idx >= 0:
+            legacy_section = "\n\n" + existing[idx:]
+
+    (ai_dir / "STATUS.md").write_text("\n".join(lines) + legacy_section + "\n")
