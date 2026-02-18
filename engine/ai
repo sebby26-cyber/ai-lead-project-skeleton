@@ -11,6 +11,9 @@ Usage:
     ai rehydrate-db                Rebuild SQLite DB from canonical YAML
     ai validate                    Validate YAML against JSON schemas
     ai git-sync                    Commit canonical state files to git
+    ai memory export [--out PATH]  Export session memory pack
+    ai memory import --in PATH     Import session memory pack
+    ai memory purge [--ns NS] [--days N]  Purge session memory
 
 Submodule usage:
     python vendor/ai-skeleton/engine/ai init
@@ -43,6 +46,9 @@ Commands:
   validate                    Validate YAML against JSON schemas
   git-sync                    Commit canonical state files to git
   migrate                     Apply new template files (non-destructive)
+  memory export [--out PATH]  Export session memory pack (advanced)
+  memory import --in PATH     Import session memory pack (advanced)
+  memory purge [--ns NS]      Purge session memory (advanced)
 
 Options:
   --help, -h                  Show this help message
@@ -124,6 +130,33 @@ def main():
     elif command == "migrate":
         result = ai_run.handle_migrate(project_root)
         print(result)
+
+    elif command == "memory":
+        subcmd = args[1] if len(args) > 1 else ""
+        if subcmd == "export":
+            result = ai_run.handle_session_memory_export(
+                project_root, out=flags.get("out"),
+                namespaces=flags.get("ns"),
+            )
+            print(result)
+        elif subcmd == "import":
+            in_path = flags.get("in", flags.get("in_"))
+            if not in_path:
+                print("Error: --in <path> is required.")
+                sys.exit(1)
+            result = ai_run.handle_session_memory_import(project_root, in_path=in_path)
+            print(result)
+        elif subcmd == "purge":
+            result = ai_run.handle_session_memory_purge(
+                project_root,
+                namespace=flags.get("ns"),
+                days=flags.get("days"),
+            )
+            print(result)
+        else:
+            print(f"Unknown memory subcommand: '{subcmd}'")
+            print("Available: memory export, memory import, memory purge")
+            sys.exit(1)
 
     else:
         print(f"Unknown command: '{command}'")

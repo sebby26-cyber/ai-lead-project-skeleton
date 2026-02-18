@@ -339,6 +339,178 @@ def test_init_no_overwrite():
         shutil.rmtree(str(tmpdir))
 
 
+# ─── Test 9: Session memory DB init + insert/retrieve ───
+
+def test_session_memory_db():
+    from engine.memory_core.api import SessionMemory
+
+    tmpdir = make_test_project()
+    try:
+        # Setup minimal .ai/state for policy
+        ai_state = tmpdir / ".ai" / "state"
+        ai_state.mkdir(parents=True, exist_ok=True)
+        runtime_session = tmpdir / ".ai_runtime" / "session"
+        runtime_session.mkdir(parents=True, exist_ok=True)
+
+        mem = SessionMemory(tmpdir)
+
+        # Insert messages
+        id1 = mem.add_message("s1", "orchestrator", "user", "Hello world")
+        assert id1 is not None, "Failed to insert message"
+
+        id2 = mem.add_message("s1", "orchestrator", "assistant", "Hi there")
+        assert id2 is not None, "Failed to insert second message"
+
+        # Retrieve
+        msgs = mem.get_recent_messages("s1", "orchestrator", limit=10)
+        assert len(msgs) == 2, f"Expected 2 messages, got {len(msgs)}"
+        assert msgs[0]["role"] == "user"
+        assert msgs[0]["content"] == "Hello world"
+        assert msgs[1]["role"] == "assistant"
+
+        # Insert and retrieve fact
+        fid = mem.add_fact("s1", "orchestrator", "Project uses Python 3.9+", importance=8, tags=["tech"])
+        assert fid is not None, "Failed to insert fact"
+
+        # Insert and retrieve summary
+        mem.upsert_summary("s1", "orchestrator", "This is a test project summary.")
+        context = mem.get_context("s1", "orchestrator", max_recent=2, max_facts=5)
+        assert len(context) > 0, "Context should not be empty"
+
+        mem.close()
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 10: Session memory FTS fallback ───
+
+def test_session_memory_fts_fallback():
+    from engine.memory_core.api import SessionMemory
+
+    tmpdir = make_test_project()
+    try:
+        runtime_session = tmpdir / ".ai_runtime" / "session"
+        runtime_session.mkdir(parents=True, exist_ok=True)
+
+        mem = SessionMemory(tmpdir)
+
+        # Insert searchable content
+        mem.add_message("s1", "orchestrator", "user", "The database schema uses PostgreSQL")
+        mem.add_message("s1", "orchestrator", "assistant", "I recommend using SQLite for local cache")
+        mem.add_message("s1", "orchestrator", "user", "What about Redis?")
+
+        # Search (works with FTS5 or LIKE fallback)
+        results = mem.search("s1", "orchestrator", "SQLite")
+        assert len(results) >= 1, f"Search should find SQLite message, got {len(results)}"
+        assert "SQLite" in results[0]["content"]
+
+        mem.close()
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 11: Session memory redaction ───
+
+def test_session_memory_redaction():
+    from engine.memory_core.api import SessionMemory
+
+    tmpdir = make_test_project()
+    try:
+        runtime_session = tmpdir / ".ai_runtime" / "session"
+        runtime_session.mkdir(parents=True, exist_ok=True)
+
+        mem = SessionMemory(tmpdir)
+
+        # Insert message with sensitive content
+        mem.add_message("s1", "orchestrator", "user",
+                        "Use api_key=sk-abc123def456ghi789jkl012mno345 for auth")
+
+        msgs = mem.get_recent_messages("s1", "orchestrator", limit=1)
+        assert len(msgs) == 1
+        assert "sk-abc123def456ghi789jkl012mno345" not in msgs[0]["content"], \
+            "API key was not redacted!"
+        assert "[REDACTED]" in msgs[0]["content"], "Redaction placeholder missing"
+
+        mem.close()
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 12: Session memory export/import roundtrip ───
+
+def test_session_memory_pack_roundtrip():
+    from engine.memory_core.api import SessionMemory
+
+    tmpdir = make_test_project()
+    try:
+        runtime_session = tmpdir / ".ai_runtime" / "session"
+        runtime_session.mkdir(parents=True, exist_ok=True)
+
+        mem = SessionMemory(tmpdir)
+
+        # Add data
+        mem.add_message("s1", "orchestrator", "user", "Test message one")
+        mem.add_message("s1", "orchestrator", "assistant", "Test response")
+        mem.add_fact("s1", "orchestrator", "Important fact", importance=9)
+
+        # Export as directory
+        export_dir = tmpdir / "test_export"
+        result = mem.export_pack(export_dir)
+        assert Path(result).is_dir(), "Export directory not created"
+        assert (Path(result) / "manifest.json").exists(), "manifest.json missing"
+        assert (Path(result) / "messages.jsonl").exists(), "messages.jsonl missing"
+        assert (Path(result) / "checksums.json").exists(), "checksums.json missing"
+
+        # Export as zip
+        zip_path = tmpdir / "test_export.zip"
+        zip_result = mem.export_pack(zip_path)
+        assert Path(zip_result).exists(), "Zip not created"
+
+        mem.close()
+
+        # Import into fresh instance
+        runtime2 = tmpdir / ".ai_runtime2" / "session"
+        runtime2.mkdir(parents=True, exist_ok=True)
+        mem2 = SessionMemory(tmpdir, db_path=runtime2 / "memory.db")
+
+        counts = mem2.import_pack(export_dir)
+        assert counts.get("messages", 0) >= 2, f"Expected >= 2 messages imported, got {counts}"
+        assert counts.get("facts", 0) >= 1, f"Expected >= 1 fact imported, got {counts}"
+
+        # Verify data is there
+        msgs = mem2.get_recent_messages("s1", "orchestrator", limit=10)
+        assert len(msgs) >= 2, "Imported messages not retrievable"
+
+        mem2.close()
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
+# ─── Test 13: Session memory policy enforcement ───
+
+def test_session_memory_policy():
+    from engine.memory_core.api import SessionMemory
+
+    tmpdir = make_test_project()
+    try:
+        runtime_session = tmpdir / ".ai_runtime" / "session"
+        runtime_session.mkdir(parents=True, exist_ok=True)
+
+        mem = SessionMemory(tmpdir)
+
+        # "worker_ephemeral" namespace has persist=none by default
+        result = mem.add_message("s1", "worker_ephemeral", "user", "Should not persist")
+        assert result is None, "Message should be rejected for ephemeral namespace"
+
+        # "orchestrator" namespace should accept
+        result = mem.add_message("s1", "orchestrator", "user", "Should persist")
+        assert result is not None, "Message should be accepted for orchestrator namespace"
+
+        mem.close()
+    finally:
+        shutil.rmtree(str(tmpdir))
+
+
 # ─── Run all ───
 
 def main():
@@ -361,6 +533,11 @@ def main():
     check("Schema validation", test_validation)
     check("Status rendering", test_status_rendering)
     check("Init no-overwrite", test_init_no_overwrite)
+    check("Session memory DB init + CRUD", test_session_memory_db)
+    check("Session memory FTS fallback", test_session_memory_fts_fallback)
+    check("Session memory redaction", test_session_memory_redaction)
+    check("Session memory pack roundtrip", test_session_memory_pack_roundtrip)
+    check("Session memory policy enforcement", test_session_memory_policy)
 
     print(f"\n{'=' * 40}")
     print(f"  Results: {passed} passed, {failed} failed")

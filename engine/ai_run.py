@@ -98,6 +98,66 @@ def handle_migrate(project_root: Path, **kwargs) -> str:
     return "\n".join(lines)
 
 
+def handle_session_memory_export(
+    project_root: Path,
+    out: str | None = None,
+    namespaces: str | None = None,
+    **kwargs,
+) -> str:
+    """Export session memory pack."""
+    from .memory_core.api import SessionMemory
+
+    mem = SessionMemory(project_root)
+    try:
+        ns_list = namespaces.split(",") if namespaces else None
+        out_path = out or str(project_root / ".ai_runtime" / "session" / "memory_export")
+        result_path = mem.export_pack(out_path, ns_list)
+        return f"Session memory exported to: {result_path}"
+    finally:
+        mem.close()
+
+
+def handle_session_memory_import(
+    project_root: Path,
+    in_path: str = "",
+    **kwargs,
+) -> str:
+    """Import session memory pack."""
+    if not in_path:
+        return "Error: --in <path> is required."
+
+    from .memory_core.api import SessionMemory
+
+    mem = SessionMemory(project_root)
+    try:
+        counts = mem.import_pack(in_path)
+        parts = [f"{k}: {v}" for k, v in counts.items() if v > 0]
+        return f"Session memory imported. {', '.join(parts)}."
+    except (FileNotFoundError, ValueError) as e:
+        return f"Error: {e}"
+    finally:
+        mem.close()
+
+
+def handle_session_memory_purge(
+    project_root: Path,
+    namespace: str | None = None,
+    days: str | None = None,
+    **kwargs,
+) -> str:
+    """Purge session memory."""
+    from .memory_core.api import SessionMemory
+
+    mem = SessionMemory(project_root)
+    try:
+        days_int = int(days) if days else None
+        counts = mem.purge(namespace=namespace, older_than_days=days_int)
+        parts = [f"{k}: {v}" for k, v in counts.items()]
+        return f"Session memory purged. {', '.join(parts)}."
+    finally:
+        mem.close()
+
+
 def handle_git_sync(project_root: Path, message: str | None = None, **kwargs) -> str:
     # First render status to update STATUS.md
     ai_dir = project_root / ".ai"

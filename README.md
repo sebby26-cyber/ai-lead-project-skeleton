@@ -15,12 +15,15 @@ An orchestration engine and canonical state framework for running AI agent teams
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Getting Started](#getting-started)
+- [Resuming on a New Computer](#resuming-on-a-new-computer)
 - [Human Interaction Model](#human-interaction-model)
 - [Architecture](#architecture)
 - [Directory Structure](#directory-structure)
 - [Authority Model](#authority-model)
 - [Persistence Model](#persistence-model)
 - [Memory Packs](#memory-packs)
+- [Session Memory](#session-memory)
 - [Installation](#installation)
 - [First Run](#first-run)
 - [Command Reference](#command-reference)
@@ -60,6 +63,70 @@ Or create a wrapper at your project root:
 #!/usr/bin/env bash
 exec python3 "$(dirname "$0")/vendor/ai-skeleton/engine/ai" "$@"
 ```
+
+---
+
+## Getting Started
+
+A step-by-step walkthrough for first-time setup. No technical knowledge required.
+
+### Step 1 — Open your project
+
+Clone or open the project that already includes the AI skeleton. If the skeleton was added as a submodule, it lives in `vendor/ai-skeleton/` and comes with the repo automatically.
+
+### Step 2 — Initialize the AI system
+
+Ask the orchestrator (or run `ai init`) to set up the project. This creates the local runtime environment on your machine. It does not overwrite any existing project files or state.
+
+The system will walk you through team setup: what roles to create, which AI providers to use, and what actions require your approval.
+
+### Step 3 — Talk to the Orchestrator
+
+You interact using plain language. No commands to memorize.
+
+```
+"Give me a status report."
+"What is everyone working on?"
+"Set up the team."
+"What's next?"
+```
+
+The orchestrator reads your intent and handles everything internally.
+
+### Step 4 — Work normally
+
+From here, you just keep talking. Ask for progress, approve or reject work, request changes. The orchestrator manages tasks, delegates to workers, and commits state changes to the repo on your behalf.
+
+---
+
+## Resuming on a New Computer
+
+When you move to a different machine or start a fresh clone, your project state comes with the repo. Session memory (conversation history) is optional but recommended for richer continuity.
+
+### Step 1 — Clone and initialize
+
+```bash
+git clone <your-project-repo>
+git submodule update --init --recursive
+python vendor/ai-skeleton/engine/ai init --non-interactive
+```
+
+This rebuilds the local runtime from the committed project state. The orchestrator immediately knows the current phase, task board, and decision history.
+
+### Step 2 — Import memory (optional)
+
+If you exported a memory pack from your previous machine:
+
+```
+"Import previous memory and resume where we left off."
+```
+
+This restores conversation history and session context. Without it, the orchestrator still works — it just won't have the full conversation timeline.
+
+### How it works
+
+- `.ai/` = project truth. Travels with git. Always present after a clone.
+- `.ai_runtime/` = local session data. Rebuilt automatically. Enhanced by memory packs.
 
 ---
 
@@ -121,6 +188,16 @@ The following are real prompts you can use. No commands. No syntax. Just intent.
 "Set up a team with developers, a PM, and a UI designer."
 "I want coding handled by Codex and design by Claude."
 "Add another developer worker."
+```
+
+**Onboarding and Continuity**
+
+```
+"Start onboarding."
+"Set up my AI team."
+"Resume this project."
+"Export memory so I can move computers."
+"Import memory and continue."
 ```
 
 ### Intent-to-Command Mapping
@@ -378,6 +455,59 @@ ai import-memory --in /path/to/pack-dir/
 
 ---
 
+## Session Memory
+
+Persistent, model-agnostic session memory that reduces token usage across runs. Lives entirely in `.ai_runtime/` (never committed). Think of it as a runtime-only context accelerator — the orchestrator uses it to maintain continuity without replaying full conversation history.
+
+> Session memory requires no API keys and makes no LLM calls. It works with any model by returning plain `{role, content}` messages.
+
+### Mental Model
+
+Session memory lives locally in `.ai_runtime/` and is never committed. It improves continuity across sessions and reduces token usage by replacing full conversation replay with compact summaries and distilled facts. It is portable via memory packs but does not replace canonical project state in `.ai/`.
+
+### Namespaces
+
+Session memory is scoped by namespace to isolate context:
+
+| Namespace | Default Policy | Purpose |
+|---|---|---|
+| `orchestrator` | `full` | Full message history for the orchestrator |
+| `shared` | `distilled_only` | Cross-agent facts and summaries |
+| `worker_*` | `summary_only` | Per-worker session context |
+| `worker_ephemeral` | `none` | Disposable workers (nothing persisted) |
+
+### Policy
+
+Persistence behavior is controlled by `.ai/state/memory_policy.yaml`:
+
+- **persist** — `full`, `summary_only`, `distilled_only`, or `none`
+- **retention_days** — auto-purge threshold
+- **max_recent_messages** — context window cap
+- **max_facts** — distilled fact limit per namespace
+- **denylist** — regex patterns for redaction (API keys, tokens, etc.)
+
+### Token Reduction
+
+Instead of replaying full history, the orchestrator calls `get_context()` which assembles:
+
+1. Rolling summary (compressed prior history)
+2. Relevant facts (distilled key points)
+3. Recent messages (small sliding window)
+
+This replaces hundreds of messages with a compact context payload.
+
+### Export / Import (Advanced)
+
+```bash
+ai memory export --out /path/to/pack.zip
+ai memory import --in /path/to/pack.zip
+ai memory purge --ns orchestrator --days 30
+```
+
+Session memory packs are separate from canonical memory packs (`ai export-memory`). They carry messages, facts, and summaries — not orchestration events.
+
+---
+
 ## Installation
 
 **Prerequisites:** Python 3.9+, PyYAML (`pip install pyyaml`), Git
@@ -500,6 +630,30 @@ Apply new skeleton templates without destroying state.
 - **Does:** Copy missing template files into `.ai/`, update skeleton version
 - **Never overwrites:** Existing `.ai/state/*.yaml`
 - **When to use:** After submodule updates that add new templates
+
+### ai memory export
+
+Export session memory as a portable pack.
+
+- **Does:** Export messages, facts, summaries to directory or zip
+- **Flags:** `--out <path>`, `--ns <namespace>`
+- **Modifies:** `.ai_runtime/` only
+
+### ai memory import
+
+Import a session memory pack.
+
+- **Does:** Validate checksums, append messages/facts/summaries
+- **Flags:** `--in <path>` — required
+- **Never modifies:** `.ai/state/*.yaml`
+
+### ai memory purge
+
+Purge session memory records.
+
+- **Does:** Delete messages, facts, summaries matching criteria
+- **Flags:** `--ns <namespace>`, `--days <N>` — filter by namespace or age
+- **Modifies:** `.ai_runtime/session/memory.db` only
 
 ---
 
@@ -787,10 +941,15 @@ DAILY
 DATABASE
   ai rehydrate-db
 
-MEMORY
+MEMORY (canonical)
   ai export-memory
   ai export-memory --out /path/to/pack.zip
   ai import-memory --in /path/to/pack.zip
+
+SESSION MEMORY (advanced)
+  ai memory export --out /path/to/pack.zip
+  ai memory import --in /path/to/pack.zip
+  ai memory purge --ns orchestrator --days 30
 
 ENGINE UPDATE
   git submodule update --remote --merge
