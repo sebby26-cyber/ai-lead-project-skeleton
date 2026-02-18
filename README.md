@@ -9,6 +9,10 @@ If you cloned this repository and need to run an AI team on a real project, star
 
 ## Table of Contents
 
+**Start here if you are a non-technical user:** [Human vs System Interaction Model](#human-vs-system-interaction-model)
+
+---
+
 1. [What This Project Is](#1-what-this-project-is)
 2. [Core Philosophy — AI ≠ Humans](#2-core-philosophy--ai--humans)
 3. [Architecture Overview](#3-architecture-overview)
@@ -18,7 +22,7 @@ If you cloned this repository and need to run an AI team on a real project, star
 7. [Exportable Memory Pack](#7-exportable-memory-pack)
 8. [Installation and Setup](#8-installation-and-setup)
 9. [First Run Lifecycle](#9-first-run-lifecycle)
-10. [Full Command Reference](#10-full-command-reference)
+10. [Internal Command Reference (Advanced)](#10-internal-command-reference-advanced)
 11. [Status Reporting System](#11-status-reporting-system)
 12. [Git Sync Behavior](#12-git-sync-behavior)
 13. [Updating the Skeleton](#13-updating-the-skeleton)
@@ -99,6 +103,141 @@ triggers enforce human checkpoints at the right moments.
 | **Portable context** | State survives machine changes via memory packs and repo commits. |
 | **Restartable workflows** | Any interrupted workflow can resume from the last committed state. |
 | **Repo-first continuity** | If the repo is clean, any new agent can resume in under 15 minutes. |
+
+---
+
+---
+
+# Human vs System Interaction Model
+
+> **Users interact via prompts, not commands.**
+
+This system has two distinct layers. Understanding the difference is all you need to use it effectively.
+
+| Layer | Who uses it | How |
+|---|---|---|
+| **Human Interaction Layer** | You | Natural language — speak in goals |
+| **AI Execution Layer** | The Orchestrator | Internal commands, YAML, git ops |
+
+You speak. The Orchestrator acts. You never need to know what it does under the hood.
+
+---
+
+## Talking to the Orchestrator (Examples)
+
+The following are real prompts you can use. No commands. No syntax. Just intent.
+
+### Status and Awareness
+
+- "Give me a status report."
+- "What is everyone working on right now?"
+- "Show progress and blockers."
+- "Summarize what changed since yesterday."
+- "What's next?"
+- "What is the highest priority task?"
+
+### Planning and Delegation
+
+- "Break this into tasks and assign the team."
+- "Who should handle this feature?"
+- "Reprioritize based on current blockers."
+- "We need to add X to the backlog."
+- "Move this to in progress."
+- "Mark that as done."
+
+### Approvals and Decisions
+
+- "Approve this and continue."
+- "Reject this and revise."
+- "Pause implementation until I review."
+- "What decisions are waiting on me?"
+- "Proceed to release."
+
+### Continuity and Handoff
+
+- "Prepare a handoff summary."
+- "If a new lead agent took over right now, what do they need to know?"
+- "Commit current state to the repo."
+- "Sync project status."
+
+### Memory and Portability
+
+- "Save memory so I can continue on another machine."
+- "Export the full project memory."
+- "Load previous project memory from this file."
+- "I'm switching machines — get me ready."
+
+### Team Setup
+
+- "Set up a team with developers, a PM, and a UI designer."
+- "I want coding handled by Codex and design by Claude."
+- "Add another developer worker."
+- "What's our current team composition?"
+
+### Engine Updates
+
+- "Update the AI engine to the latest version."
+- "Apply new skeleton features safely."
+- "What version of the engine are we running?"
+
+---
+
+## System Operations (Internal — handled by Orchestrator)
+
+These commands exist inside the engine. You do not run them. The Orchestrator maps your intent to them automatically.
+
+| What you say | Internal action |
+|---|---|
+| "Give me a status report." | `ai status` |
+| "Save / export memory." | `ai export-memory` |
+| "Load / import memory." | `ai import-memory` |
+| "Commit / sync state." | `ai git-sync` |
+| "Rebuild runtime state." | `ai rehydrate-db` |
+| "Validate the project state." | `ai validate` |
+| "Initialize / set up AI." | `ai init` |
+| "Update the engine." | `git submodule update` + `ai migrate` |
+
+If you ever need to run these directly (CI pipelines, scripted automation, debugging), see [Section 10 — Internal Command Reference](#10-internal-command-reference-advanced).
+
+---
+
+## How the Orchestrator Thinks
+
+When you say something, the Orchestrator runs this pipeline internally:
+
+```
+You express intent (natural language)
+        ↓
+Orchestrator interprets what you want
+        ↓
+Selects internal actions (commands, file updates, git ops)
+        ↓
+Updates canonical project state
+        ↓
+Produces human-readable output for you
+        ↓
+Commits to repo if state changed
+```
+
+You see the first and last step. Everything in between is invisible to you by design.
+
+---
+
+## Minimum User Knowledge
+
+**You only need to know:**
+- How to talk to the Orchestrator in plain language.
+- How to approve or reject work when asked.
+- How to ask for status or progress at any time.
+
+**You do not need to know:**
+- CLI commands or their syntax.
+- YAML file structure or how to edit them.
+- How the SQLite runtime database works.
+- How git commits or submodules work.
+- How the Orchestrator delegates to workers internally.
+
+If operating this system requires you to know any of the above, that is a gap in the system — not a knowledge gap in you.
 
 ---
 
@@ -510,7 +649,9 @@ When you run `ai init` on a fresh project, the following sequence executes:
 
 ---
 
-## 10. Full Command Reference
+## 10. Internal Command Reference (Advanced)
+
+> **Non-technical users can skip this section.** The Orchestrator handles all of the following automatically based on your natural language prompts. This section is for power users, CI automation, and debugging.
 
 All commands are invoked as:
 
