@@ -1,55 +1,78 @@
 # Implementation Plan: Automatic Persistence
 
-## What Exists
+> Status: **COMPLETE** — All items implemented and verified (18/18 self-check tests pass).
 
-- **memory_core/** module with full API: add_message, get_context, search, facts, summaries, packs, redaction, policy
-- **Policy template** at `templates/.ai/state/memory_policy.yaml` with per-namespace persist modes
-- **CLI hooks** for manual `ai memory export/import/purge`
-- **Canonical persistence** via explicit `ai git-sync` (whitelist enforced)
-- **STATUS.md** updated only on `ai status` or `ai git-sync`
-- **Run loop** is a simple REPL with no persistence between turns
-- **Session memory commands** not registered in `commands.yaml`
+## What Exists (Final State)
 
-## What Is Missing
+### Memory Core (`engine/memory_core/`)
+- **api.py** — Public `SessionMemory` class. Only file imported from outside the package.
+- **store_sqlite.py** — SQLite backend with WAL mode, schema, message/fact/summary CRUD, purge, events, meta.
+- **search_fts.py** — FTS5 search with automatic LIKE fallback.
+- **policy.py** — Policy loader from YAML, per-namespace enforcement (persist mode, retention, roles, denylist).
+- **redact.py** — Pattern-based redaction (API keys, bearer tokens, secrets). Built-in + user denylist.
+- **packs.py** — Export/import memory packs (directory or zip, manifest + JSONL + checksums).
+- **models.py** — Pure dataclasses: Message, Fact, Summary, NamespacePolicy, MemoryPolicy.
+- **util.py** — Distillation prompt builders (strings only, no model calls).
 
-1. **No auto-persistence** — run_loop does not persist user/assistant turns to session memory
-2. **No auto git-sync** — canonical state changes (board, decisions) require manual commit
-3. **No auto STATUS.md update** — only happens on explicit status/git-sync commands
-4. **No auto memory pack export** — no shutdown hook, no periodic export
-5. **No auto memory pack import** — no import_inbox check on startup
-6. **No distillation trigger** — distill_every_n_turns policy field is unused
-7. **Missing command registrations** — migrate, session-memory commands absent from commands.yaml
+### Auto-Persistence Hooks (`engine/ai_run.py`)
+- **`run_loop()`** — Full orchestrator loop with automatic persistence:
+  - Persists every user input and command response to session memory (orchestrator namespace)
+  - Auto-imports from `.ai_runtime/import_inbox/` on startup
+  - Auto-exports session memory pack to `.ai_runtime/memory_packs/` on graceful exit
+  - Re-renders `STATUS.md` on exit
+  - Checks distillation interval every N turns (signals orchestrator, no model calls)
+  - Logs state-changing commands as canonical events
 
-## What Will Change
+### Canonical Persistence
+- **`ai git-sync`** — Commits only whitelisted `.ai/` paths, never `.ai_runtime/`
+- **`STATUS.md`** — Auto-updated on status, git-sync, and run-loop exit
+- **`DECISIONS.md`** — Append-only decision log
+- **Reconciliation** — Canonical YAML ingested into SQLite; hash-based change detection
 
-### ai_run.py
-- `run_loop()` gains a `SessionMemory` instance, persists every user input and command response
-- `run_loop()` calls `_maybe_distill()` every N turns (per policy)
-- `run_loop()` auto-exports session memory pack on graceful exit
-- `run_loop()` checks `import_inbox/` on startup for auto-import
-- Handlers that modify canonical state (`handle_git_sync`, board/approval changes) trigger STATUS.md re-render
+### Policy Template (`templates/.ai/state/memory_policy.yaml`)
+- Per-namespace persist modes: `full`, `summary_only`, `distilled_only`, `none`
+- `auto_export_on_exit: true`, `auto_import_inbox: true`
+- Global + namespace denylist regex patterns
+- Retention days, max messages, max facts, distillation interval, allowed roles
 
-### ai_init.py
-- `setup_runtime()` creates `import_inbox/` directory alongside existing dirs
+### CLI (`engine/ai`)
+- `ai init`, `ai run`, `ai status`, `ai validate`, `ai git-sync`, `ai migrate`
+- `ai export-memory`, `ai import-memory`, `ai rehydrate-db`
+- `ai memory export/import/purge` (session memory advanced commands)
 
-### engine/memory_core/api.py
-- Add `get_message_count()` method for distillation trigger checks
+### Runtime Directories (`.ai_runtime/`)
+- `session/` — memory.db (session memory SQLite)
+- `import_inbox/` — Drop zone for auto-import on startup
+- `memory_packs/` — Auto-exported packs on exit
+- `logs/`, `memory_pack_cache/` — Working directories
 
-### templates/.ai/state/commands.yaml
-- Register `migrate`, `memory-export`, `memory-import`, `memory-purge`
+## Self-Check Coverage (18 tests)
 
-### templates/.ai/state/memory_policy.yaml
-- Add `auto_export_on_exit: true` and `auto_import_inbox: true` fields
+| # | Test | Status |
+|---|------|--------|
+| 1 | Project root detection | PASS |
+| 2 | Init creates structure | PASS |
+| 3 | DB creation + ingest | PASS |
+| 4 | Export/import roundtrip | PASS |
+| 5 | Git-sync whitelist | PASS |
+| 6 | Schema validation | PASS |
+| 7 | Status rendering | PASS |
+| 8 | Init no-overwrite | PASS |
+| 9 | Session memory DB init + CRUD | PASS |
+| 10 | Session memory FTS fallback | PASS |
+| 11 | Session memory redaction | PASS |
+| 12 | Session memory pack roundtrip | PASS |
+| 13 | Session memory policy enforcement | PASS |
+| 14 | Auto-import from inbox | PASS |
+| 15 | Auto-export pack | PASS |
+| 16 | Distillation check | PASS |
+| 17 | STATUS.md auto-update | PASS |
+| 18 | Init creates autopersist dirs | PASS |
 
-## What Remains Stable
+## Architecture Boundaries
 
-- **memory_core/ API boundary** — no breaking changes to public methods
-- **Canonical state model** — `.ai/state/*.yaml` structure unchanged
-- **Git-sync whitelist** — same paths, same enforcement
-- **Policy enforcement** — persist modes, redaction, role filtering unchanged
-- **Self-check tests 1-13** — all existing tests remain passing
-- **README 3-layer structure** — no reorganization
-
-## Refactors Required
-
-- None breaking. All changes are additive hooks wired into existing lifecycle points.
+- **memory_core/** is decoupled behind `SessionMemory` API — extractable to its own repo
+- **No LLM calls** in memory_core — model-agnostic, returns plain `{role, content}` messages
+- **No API keys required** — works with any model interface
+- **Canonical state** (`.ai/`) is git-committed; runtime state (`.ai_runtime/`) is gitignored
+- **Memory packs** are portable context accelerators, not committed by default
