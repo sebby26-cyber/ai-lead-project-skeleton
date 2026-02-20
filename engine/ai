@@ -100,7 +100,7 @@ def main():
         ai_run.run_loop(project_root)
 
     elif command == "status":
-        result = ai_run.handle_status(project_root)
+        result = ai_run.handle_status(project_root, json="json" in flags)
         print(result)
 
     elif command == "export-memory":

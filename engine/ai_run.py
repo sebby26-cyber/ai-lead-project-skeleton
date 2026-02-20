@@ -15,6 +15,25 @@ from pathlib import Path
 from . import ai_db, ai_git, ai_init, ai_memory, ai_state, ai_validate
 
 
+def _load_adapter_data(project_root: Path) -> dict | None:
+    """Try to load the project's report_adapter.
+
+    Looks for report_adapter.py in the project root.
+    Returns adapter_data dict or None if not available.
+    """
+    adapter_path = project_root / "report_adapter.py"
+    if not adapter_path.exists():
+        return None
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("report_adapter", str(adapter_path))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.build_adapter_data(project_root)
+    except Exception:
+        return None
+
+
 def find_schemas_dir() -> Path:
     """Find the schemas directory in the skeleton repo."""
     return ai_init.find_skeleton_dir() / "schemas"
@@ -27,6 +46,21 @@ def handle_status(project_root: Path, **kwargs) -> str:
     ai_dir = project_root / ".ai"
     runtime_dir = project_root / ".ai_runtime"
     ai_state.reconcile(ai_dir, runtime_dir)
+
+    # Use new reporting pipeline if adapter is available
+    adapter_data = _load_adapter_data(project_root)
+    if adapter_data is not None:
+        from .reporting import generate_report, render_terminal, render_json
+        from .reporting.status_md import write_status_md
+
+        report = generate_report(adapter_data)
+        write_status_md(report, ai_dir)
+
+        if kwargs.get("json"):
+            return render_json(report)
+        return render_terminal(report)
+
+    # Fallback to legacy render
     return ai_state.render_status(ai_dir, runtime_dir)
 
 

@@ -129,13 +129,14 @@ def render_status(ai_dir: Path, runtime_dir: Path) -> str:
     pending_approvals = approvals.get("approval_log", [])
     pending = [a for a in pending_approvals if a.get("status") == "pending"]
 
-    # Build report
-    lines = []
-    lines.append("=" * 50)
-    lines.append("  PROJECT STATUS")
-    lines.append("=" * 50)
+    # Group tasks by status
+    tasks_by_status = {col: [] for col in columns}
+    for task in tasks:
+        s = task.get("status", "backlog")
+        if s in tasks_by_status:
+            tasks_by_status[s].append(task)
 
-    # Phase
+    # Determine phase
     if total == 0:
         phase = "Initialization"
     elif done == total:
@@ -144,11 +145,18 @@ def render_status(ai_dir: Path, runtime_dir: Path) -> str:
         phase = "Active Development"
     else:
         phase = "Planning"
+
+    # Build report
+    lines = []
+    lines.append("=" * 60)
+    lines.append("  PROJECT STATUS")
+    lines.append("=" * 60)
     lines.append(f"  Phase: {phase}")
+    lines.append(f"  Progress: [{bar}] {pct}%  ({done}/{total} tasks done)")
     lines.append("")
 
-    # Tasks by column
-    lines.append("  Tasks:")
+    # Summary row
+    lines.append("  Summary:")
     max_col_len = max((len(c) for c in columns), default=10)
     max_count = max(counts.values()) if counts else 1
     for col in columns:
@@ -158,19 +166,29 @@ def render_status(ai_dir: Path, runtime_dir: Path) -> str:
         lines.append(f"    {col:<{max_col_len}}  {bar_str}  {cnt}")
     lines.append("")
 
-    # Progress
-    lines.append(f"  Progress: [{bar}] {pct}%")
-    lines.append("")
-
-    # Active tasks
-    if active:
-        lines.append("  Active Tasks:")
-        for t in active:
+    # Detailed task listing per non-empty status (skip done for brevity)
+    display_order = [c for c in columns if c != "done"]
+    for col in display_order:
+        col_tasks = tasks_by_status.get(col, [])
+        if not col_tasks:
+            continue
+        lines.append(f"  {col.upper().replace('_', ' ')} ({len(col_tasks)}):")
+        for t in col_tasks:
             owner = t.get("owner_role", "unassigned")
-            lines.append(f"    - {t['id']}: {t['title']} ({owner})")
+            priority = t.get("priority", "")
+            pri_tag = f" [{priority}]" if priority else ""
+            lines.append(f"    - {t['id']}: {t['title']}{pri_tag} ({owner})")
         lines.append("")
 
-    # Blockers
+    # Done tasks (collapsed list)
+    done_tasks = tasks_by_status.get("done", [])
+    if done_tasks:
+        lines.append(f"  DONE ({len(done_tasks)}):")
+        for t in done_tasks:
+            lines.append(f"    - {t['id']}: {t['title']}")
+        lines.append("")
+
+    # Blockers / Approvals
     if pending:
         lines.append("  Pending Approvals:")
         for a in pending:
@@ -178,18 +196,27 @@ def render_status(ai_dir: Path, runtime_dir: Path) -> str:
     else:
         lines.append("  Blockers: None")
         lines.append("  Pending Approvals: None")
+
+    # Recent decisions
+    decisions_path = ai_dir / "DECISIONS.md"
+    if decisions_path.exists():
+        lines.append("")
+        lines.append("  Recent Decisions: see .ai/DECISIONS.md")
+
     lines.append("")
-    lines.append("=" * 50)
+    lines.append("=" * 60)
 
     report = "\n".join(lines)
 
     # Also write STATUS.md
-    _write_status_md(ai_dir, phase, columns, counts, total, done, pct, active, pending)
+    _write_status_md(ai_dir, phase, columns, counts, total, done, pct,
+                     active, pending, tasks_by_status)
 
     return report
 
 
-def _write_status_md(ai_dir, phase, columns, counts, total, done, pct, active, pending):
+def _write_status_md(ai_dir, phase, columns, counts, total, done, pct,
+                     active, pending, tasks_by_status):
     from datetime import datetime, timezone
 
     bar_width = 20
@@ -201,19 +228,35 @@ def _write_status_md(ai_dir, phase, columns, counts, total, done, pct, active, p
     lines.append("")
     lines.append(f"## Phase\n{phase}")
     lines.append("")
+    lines.append(f"## Progress\n[{bar_md}] {pct}%  ({done}/{total} tasks done)")
+    lines.append("")
     lines.append("## Task Summary")
     lines.append("| Column | Count |")
     lines.append("|--------|-------|")
     for col in columns:
         lines.append(f"| {col} | {counts.get(col, 0)} |")
     lines.append("")
-    lines.append(f"## Progress\n[{bar_md}] {pct}%")
-    lines.append("")
 
-    if active:
-        lines.append("## Active Tasks")
-        for t in active:
-            lines.append(f"- **{t['id']}**: {t['title']} (owner: {t.get('owner_role', 'unassigned')})")
+    # Detailed task listing per status
+    display_order = [c for c in columns if c != "done"]
+    for col in display_order:
+        col_tasks = tasks_by_status.get(col, [])
+        if not col_tasks:
+            continue
+        lines.append(f"## {col.replace('_', ' ').title()} ({len(col_tasks)})")
+        for t in col_tasks:
+            owner = t.get("owner_role", "unassigned")
+            priority = t.get("priority", "")
+            pri_tag = f" `{priority}`" if priority else ""
+            lines.append(f"- **{t['id']}**: {t['title']}{pri_tag} (owner: {owner})")
+        lines.append("")
+
+    # Done tasks
+    done_tasks = tasks_by_status.get("done", [])
+    if done_tasks:
+        lines.append(f"## Done ({len(done_tasks)})")
+        for t in done_tasks:
+            lines.append(f"- ~~{t['id']}~~: {t['title']}")
         lines.append("")
 
     if pending:
