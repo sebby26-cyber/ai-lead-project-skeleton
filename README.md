@@ -1,5 +1,24 @@
 # Scaffold AI
 
+```
+            ─────────────╦══════════════╗
+                         ║              ╠═╗
+                         ║              ║ │
+                         ║              ║ ◆
+                         ║
+                         ║   S C A F F O L D  A I
+                         ║
+                         ║   AI agent orchestration
+                         ║   for real projects.
+                         ║
+                         ║   One leader. Many workers.
+                         ║   State you can read.
+                         ║   Memory that travels.
+                         ║
+                       ══╩══
+                      ▓▓▓▓▓▓▓
+```
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-green.svg)](https://www.python.org)
 [![State: YAML](https://img.shields.io/badge/State-YAML%20%2B%20Git-orange.svg)](#persistence-model)
