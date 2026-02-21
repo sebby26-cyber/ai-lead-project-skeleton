@@ -123,6 +123,24 @@ The system maps your intent to the right action automatically. No commands to me
 
 ---
 
+## Requirements (AI CLI Setup)
+
+This system uses AI tools installed on your computer. You need to install and log into one of these tools before using this project.
+
+**Supported tools:**
+
+| Tool | Status | Official setup |
+|------|--------|----------------|
+| Claude Code | Fully supported | [Installation guide](https://docs.anthropic.com/en/docs/claude-code/overview) |
+| OpenAI Codex CLI | Fully supported | [Installation guide](https://github.com/openai/codex) |
+| Cursor | Partial support | [Getting started](https://docs.cursor.com) |
+
+Install the CLI for the AI you want to use and log in to your account. Follow the official setup instructions from each provider.
+
+Once installed, this project uses those tools automatically through your terminal. You don't need to manage API keys inside this project.
+
+---
+
 ### Developer Setup (CLI)
 
 If you prefer terminal commands or need to set up CI/automation:
