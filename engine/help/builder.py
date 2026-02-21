@@ -93,6 +93,7 @@ def generate_help(project_root: Path, adapter: dict | None = None) -> HelpGuide:
         '"ai" command not found: run via full path (python vendor/scaffold-ai/engine/ai).',
         'YAML validation errors: run "ai validate" and fix reported issues.',
         ".ai_runtime/ accidentally committed: git rm -r --cached .ai_runtime/ and update .gitignore.",
+        "If I'm unsure about a capability, I consult the system layer (skeleton submodule) rather than guessing.",
     ]
 
     # --- File locations ---

@@ -276,6 +276,14 @@ The AI engine lives in a protected layer (the skeleton submodule). It is never m
 - Updates to the system happen through `git submodule update` and will not overwrite your project state.
 - The `validate` command checks that the system layer has not been tampered with.
 
+### How it stays consistent
+
+The skeleton submodule is the system's reference for what it can do. When the AI is unsure about a command, feature, or workflow, it checks the system layer rather than guessing. This means:
+
+- Answers about capabilities are based on what actually exists, not assumptions.
+- When you pull system updates (`git submodule update`), the AI automatically picks up new features.
+- If something isn't supported yet, the AI will tell you plainly instead of making it up.
+
 ---
 
 ## Help / Guide

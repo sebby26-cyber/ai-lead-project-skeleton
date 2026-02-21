@@ -17,6 +17,8 @@ The skeleton submodule (typically `vendor/scaffold-ai/`) is a **read-only system
 
 If you are about to write a file, resolve its absolute path first. If it falls inside the submodule, **stop and redirect** to the correct project directory.
 
+**System layer lookup:** If unsure about available commands, capabilities, or workflows, **consult the skeleton submodule** (read its docs, command registry, and help templates) before responding. Do not guess or invent features. If a capability does not exist in the system layer, say so plainly and suggest alternatives.
+
 ---
 
 ## 1. Startup Checklist

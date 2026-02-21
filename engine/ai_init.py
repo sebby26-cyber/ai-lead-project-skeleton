@@ -320,6 +320,14 @@ def init(project_root: Path | None = None, interactive: bool = True):
     else:
         print("  [WARN] No root bridge files (AGENTS.md, CLAUDE.md) created")
 
+    # 10) Build system index from skeleton
+    try:
+        from . import system_index
+        system_index.build_system_index(skeleton_dir, runtime_dir)
+        print("  [OK] System index built")
+    except Exception:
+        print("  [WARN] System index build failed (non-critical)")
+
     print("\nInitialization complete.")
     print(f"  Canonical state: {ai_dir}/state/")
     print(f"  Runtime cache:   {runtime_dir}/")

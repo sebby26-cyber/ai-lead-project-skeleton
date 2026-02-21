@@ -466,6 +466,16 @@ def run_loop(project_root: Path):
     else:
         print("  [WARN] .ai/AGENTS.md not found. Run 'ai init' to create it.")
 
+    # Build/refresh system index from skeleton submodule
+    try:
+        from . import system_index
+        skeleton_dir = ai_init.find_skeleton_dir()
+        idx = system_index.ensure_system_index(skeleton_dir, runtime_dir)
+        cmd_count = len(idx.get("commands", []))
+        print(f"  System index ready ({cmd_count} commands indexed).")
+    except Exception:
+        pass  # Non-critical: index is a cache optimization
+
     # Auto-import from inbox
     import_msg = _auto_import_inbox(project_root)
     if import_msg:
