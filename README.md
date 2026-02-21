@@ -91,7 +91,7 @@ You don't need to run commands. Just tell your AI what to do.
 If this is a new project or the system isn't set up yet, tell your AI:
 
 ```
-Pull the Scaffold AI skeleton into this project as a submodule at vendor/scaffold-ai, then run its initializer to set up the .ai/ directory and runtime.
+Pull the Scaffold AI skeleton from https://github.com/sebby26-cyber/scaffold-ai.git into this project as a submodule at vendor/scaffold-ai, then run its initializer to set up the .ai/ directory and runtime.
 ```
 
 The AI will handle cloning, submodule setup, and initialization. No terminal required.
