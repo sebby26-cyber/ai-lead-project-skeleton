@@ -10,7 +10,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .model import HelpCommand, HelpCurrentState, HelpFileLocation, HelpGuide
+from .model import (
+    HelpCategory,
+    HelpCommand,
+    HelpCurrentState,
+    HelpFileLocation,
+    HelpGuide,
+    HelpIntent,
+)
 
 try:
     import yaml
@@ -26,7 +33,7 @@ def generate_help(project_root: Path, adapter: dict | None = None) -> HelpGuide:
         adapter: Optional dict with project-specific overrides:
             - project_name: str
             - extra_commands: list[dict] (name, description, example)
-            - extra_prompts: list[str]
+            - extra_categories: list[dict] (name, icon, intents)
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     adapter = adapter or {}
@@ -43,20 +50,24 @@ def generate_help(project_root: Path, adapter: dict | None = None) -> HelpGuide:
     # --- Quick start steps (context-aware) ---
     quick_start = _build_quick_start(state, ai_dir)
 
-    # --- Common prompts ---
-    prompts = [
-        '"Give me a status report."',
-        '"What is everyone working on?"',
-        '"What\'s next?"',
-        '"Break this into tasks and assign the team."',
-        '"Approve this and continue."',
-        '"Save memory so I can continue on another machine."',
-        '"Help" or "Guide me"',
-    ]
-    if adapter.get("extra_prompts"):
-        prompts.extend(adapter["extra_prompts"])
+    # --- Prompt categories (human-first, intent-mapped) ---
+    categories = _build_prompt_categories()
+    if adapter.get("extra_categories"):
+        for cat in adapter["extra_categories"]:
+            categories.append(HelpCategory(
+                name=cat.get("name", ""),
+                icon=cat.get("icon", ""),
+                intents=[
+                    HelpIntent(
+                        prompt=i.get("prompt", ""),
+                        command=i.get("command", ""),
+                        description=i.get("description", ""),
+                    )
+                    for i in cat.get("intents", [])
+                ],
+            ))
 
-    # --- Commands ---
+    # --- Commands (advanced / power user) ---
     commands = _build_commands(ai_dir)
     if adapter.get("extra_commands"):
         for cmd in adapter["extra_commands"]:
@@ -101,12 +112,53 @@ def generate_help(project_root: Path, adapter: dict | None = None) -> HelpGuide:
         project_name=project_name,
         current_state=state,
         quick_start_steps=quick_start,
-        common_prompts=prompts,
+        prompt_categories=categories,
         commands=commands,
         how_to_resume_on_new_machine=resume,
         troubleshooting=troubleshooting,
         where_to_find_files=file_locations,
     )
+
+
+def _build_prompt_categories() -> list[HelpCategory]:
+    """Build human-first intent categories with deterministic command mappings."""
+    return [
+        HelpCategory(
+            name="Getting Started",
+            icon="\U0001f680",  # 🚀
+            intents=[
+                HelpIntent("Start or initialize the project", "ai init"),
+                HelpIntent("Resume where we left off", "ai run"),
+            ],
+        ),
+        HelpCategory(
+            name="Project Visibility",
+            icon="\U0001f4ca",  # 📊
+            intents=[
+                HelpIntent("Show me the current status", "ai status"),
+                HelpIntent("What's been completed and what's next?", "ai status"),
+                HelpIntent("Are there any blockers?", "ai status"),
+            ],
+        ),
+        HelpCategory(
+            name="Memory & Continuity",
+            icon="\U0001f9e0",  # 🧠
+            intents=[
+                HelpIntent("Save current progress", "ai export-memory"),
+                HelpIntent("Export project memory", "ai memory export"),
+                HelpIntent("Restore previous session", "ai import-memory"),
+            ],
+        ),
+        HelpCategory(
+            name="System Actions",
+            icon="\u2699\ufe0f",  # ⚙️
+            intents=[
+                HelpIntent("Validate the project", "ai validate"),
+                HelpIntent("Sync project state", "ai git-sync"),
+                HelpIntent("Check if everything is working", "ai validate"),
+            ],
+        ),
+    ]
 
 
 def _detect_state(ai_dir: Path, runtime_dir: Path) -> HelpCurrentState:
@@ -171,9 +223,9 @@ def _build_quick_start(state: HelpCurrentState, ai_dir: Path) -> list[str]:
     """Build context-aware quick start steps."""
     if not state.initialized:
         return [
-            'Run "ai init" to set up the project.',
+            'Say "Start or initialize the project" (or run ai init).',
             "The system will walk you through team setup and approval rules.",
-            'After setup, say "status" to see the project dashboard.',
+            'After setup, say "Show me the current status" to see the project dashboard.',
         ]
 
     steps = []
@@ -184,12 +236,12 @@ def _build_quick_start(state: HelpCurrentState, ai_dir: Path) -> list[str]:
     if state.task_count == 0:
         steps.append("Add tasks: describe your project goals and the orchestrator will create a task board.")
     else:
-        steps.append(f'Say "status" to see {state.task_count} tracked task(s) and current progress.')
+        steps.append(f'Say "Show me the current status" to see {state.task_count} tracked task(s) and progress.')
 
-    steps.append('Say "what\'s next?" to see prioritized upcoming work.')
+    steps.append('Say "What\'s next?" to see prioritized upcoming work.')
 
     if not state.memory_runtime_present:
-        steps.append('Run "ai run" to start the orchestrator with automatic session persistence.')
+        steps.append('Say "Resume where we left off" to start the orchestrator with automatic persistence.')
     else:
         steps.append("Session memory is active. All turns are persisted automatically.")
 
@@ -198,8 +250,6 @@ def _build_quick_start(state: HelpCurrentState, ai_dir: Path) -> list[str]:
 
 def _build_commands(ai_dir: Path) -> list[HelpCommand]:
     """Build command list from commands.yaml if available."""
-    commands_path = ai_dir / "state" / "commands.yaml"
-
     # Always include core commands
     core = [
         HelpCommand("help", "Show this guide", "ai help"),

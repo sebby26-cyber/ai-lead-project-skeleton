@@ -1,5 +1,6 @@
 # AI Command Registry
 # Maps command names and aliases to handler functions.
+# Natural language aliases enable intent-based routing.
 
 commands:
   - name: help
@@ -9,6 +10,7 @@ commands:
       - "guide me"
       - "how do I use this"
       - "what can you do"
+      - "what can I say"
       - "show me the guide"
       - "commands"
     handler: handle_help
@@ -19,36 +21,63 @@ commands:
       - "/status"
       - "status report"
       - "generate status report"
+      - "show me the current status"
+      - "what's the progress"
+      - "what's been completed and what's next"
+      - "are there any blockers"
+      - "give me status"
     handler: handle_status
     description: Generate and display project status report
+
+  - name: init
+    aliases:
+      - "/init"
+      - "start the project"
+      - "initialize"
+      - "start or initialize the project"
+    handler: handle_init
+    description: Initialize project structure and runtime
 
   - name: export-memory
     aliases:
       - "/export-memory"
+      - "save current progress"
+      - "save memory"
+      - "export memory"
     handler: handle_export_memory
     description: Export memory pack for portability
 
   - name: import-memory
     aliases:
       - "/import-memory"
+      - "restore previous session"
+      - "load memory"
+      - "import memory"
     handler: handle_import_memory
     description: Import a memory pack
 
   - name: rehydrate-db
     aliases:
       - "/rehydrate"
+      - "rebuild database"
     handler: handle_rehydrate_db
     description: Rebuild local SQLite DB from canonical YAML state
 
   - name: validate
     aliases:
       - "/validate"
+      - "validate the project"
+      - "check if everything is working"
+      - "check the state"
     handler: handle_validate
     description: Validate YAML files against JSON schemas
 
   - name: git-sync
     aliases:
       - "/git-sync"
+      - "sync project state"
+      - "commit state"
+      - "sync to git"
     handler: handle_git_sync
     description: Commit canonical AI state files to git
 
@@ -62,6 +91,7 @@ commands:
     aliases:
       - "/memory-export"
       - "session-memory-export"
+      - "export project memory"
     handler: handle_session_memory_export
     description: Export session memory pack (advanced)
 

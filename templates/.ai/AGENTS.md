@@ -68,12 +68,15 @@ If the user speaks naturally (no `/` prefix), match high-confidence intents:
 
 | User says | Route to |
 |-----------|----------|
-| "status report", "give me status", "what's the progress" | `/status` |
-| "help", "guide me", "what can you do", "how do I use this" | `/help` |
-| "save memory", "export memory" | `/export-memory` |
-| "import memory", "load memory" | `/import-memory` |
-| "validate", "check the state" | `/validate` |
-| "commit state", "sync to git" | `/git-sync` |
+| "show me the current status", "what's the progress", "are there any blockers" | `/status` |
+| "help", "guide me", "what can you do", "what can I say" | `/help` |
+| "start or initialize the project", "initialize" | `/init` |
+| "save current progress", "save memory", "export memory" | `/export-memory` |
+| "export project memory" | `/memory-export` |
+| "restore previous session", "import memory", "load memory" | `/import-memory` |
+| "validate the project", "check if everything is working" | `/validate` |
+| "sync project state", "commit state", "sync to git" | `/git-sync` |
+| "resume where we left off" | `/run` |
 
 If confidence is low, respond:
 > "Use `/status` or `/help` for guaranteed execution."

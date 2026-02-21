@@ -11,6 +11,32 @@ from dataclasses import dataclass, field, asdict
 
 
 @dataclass
+class HelpIntent:
+    """A human-friendly prompt mapped to a deterministic command."""
+    prompt: str
+    command: str
+    description: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class HelpCategory:
+    """A group of related intents under a named category."""
+    name: str
+    icon: str
+    intents: list[HelpIntent] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "icon": self.icon,
+            "intents": [i.to_dict() for i in self.intents],
+        }
+
+
+@dataclass
 class HelpCommand:
     name: str
     description: str
@@ -48,7 +74,7 @@ class HelpGuide:
     project_name: str
     current_state: HelpCurrentState = field(default_factory=HelpCurrentState)
     quick_start_steps: list[str] = field(default_factory=list)
-    common_prompts: list[str] = field(default_factory=list)
+    prompt_categories: list[HelpCategory] = field(default_factory=list)
     commands: list[HelpCommand] = field(default_factory=list)
     how_to_resume_on_new_machine: list[str] = field(default_factory=list)
     troubleshooting: list[str] = field(default_factory=list)
@@ -60,7 +86,7 @@ class HelpGuide:
             "project_name": self.project_name,
             "current_state": self.current_state.to_dict(),
             "quick_start_steps": self.quick_start_steps,
-            "common_prompts": self.common_prompts,
+            "prompt_categories": [c.to_dict() for c in self.prompt_categories],
             "commands": [c.to_dict() for c in self.commands],
             "how_to_resume_on_new_machine": self.how_to_resume_on_new_machine,
             "troubleshooting": self.troubleshooting,

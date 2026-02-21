@@ -1,7 +1,8 @@
 """
 renderer.py — Terminal renderer for HelpGuide.
 
-Produces clean, beginner-friendly terminal output.
+Produces clean, human-first terminal output.
+Intent categories are the primary UI. Commands are secondary (advanced).
 All rendering derives from the help model (which is JSON-serializable).
 """
 
@@ -40,18 +41,21 @@ def render_help_terminal(guide: HelpGuide) -> str:
         lines.append(f"  {i}. {step}")
     lines.append("")
 
-    # ── Common Prompts ──
+    # ── Human Prompt Guide (PRIMARY) ──
     lines.append(_section("What You Can Say"))
-    lines.append("  Just talk to the orchestrator in plain language:")
+    lines.append("  Just tell the orchestrator what you need:")
     lines.append("")
-    for prompt in guide.common_prompts:
-        lines.append(f"    {prompt}")
-    lines.append("")
+    for category in guide.prompt_categories:
+        lines.append(f"  {category.icon} {category.name}")
+        for intent in category.intents:
+            lines.append(f'    - "{intent.prompt}"')
+        lines.append("")
 
-    # ── Commands ──
+    # ── Commands (SECONDARY — advanced) ──
     if guide.commands:
-        lines.append(_section("Commands (for power users)"))
-        # Find max name length for alignment
+        lines.append(_section("Advanced (optional commands)"))
+        lines.append("  Use /command or ai <command> for direct execution:")
+        lines.append("")
         max_name = max(len(c.name) for c in guide.commands)
         for cmd in guide.commands:
             lines.append(f"  {cmd.name:<{max_name + 2}} {cmd.description}")
