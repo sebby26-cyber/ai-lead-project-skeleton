@@ -220,6 +220,45 @@ def handle_git_sync(project_root: Path, message: str | None = None, **kwargs) ->
     return msg
 
 
+# ── Worker Handlers ──
+
+
+def handle_spawn_workers(project_root: Path, **kwargs) -> str:
+    """Spawn worker bees from current team config."""
+    from . import ai_workers
+    return ai_workers.spawn_workers(project_root)
+
+
+def handle_workers_status(project_root: Path, **kwargs) -> str:
+    """Show current worker bee status."""
+    from . import ai_workers
+    return ai_workers.get_worker_status(project_root)
+
+
+def handle_stop_workers(project_root: Path, **kwargs) -> str:
+    """Stop all active worker bees."""
+    from . import ai_workers
+    return ai_workers.stop_workers(project_root)
+
+
+def handle_configure_team(project_root: Path, spec: str = "", **kwargs) -> str:
+    """Parse a team spec and write to team.yaml."""
+    from . import ai_workers
+    if not spec:
+        return (
+            "Provide a team spec. Example:\n"
+            '  "3 Codex devs and 1 Claude designer"\n'
+            '  "2 Codex backend devs, 1 Codex test engineer, 1 Claude UI designer"'
+        )
+    roles = ai_workers.parse_team_spec(spec, project_root)
+    if not roles:
+        return (
+            "Could not parse team spec. Try a format like:\n"
+            '  "3 Codex devs and 1 Claude designer"'
+        )
+    return ai_workers.apply_team_spec(project_root, roles)
+
+
 # ── Command Registry ──
 
 
@@ -235,6 +274,10 @@ HANDLERS = {
     "handle_session_memory_export": handle_session_memory_export,
     "handle_session_memory_import": handle_session_memory_import,
     "handle_session_memory_purge": handle_session_memory_purge,
+    "handle_spawn_workers": handle_spawn_workers,
+    "handle_workers_status": handle_workers_status,
+    "handle_stop_workers": handle_stop_workers,
+    "handle_configure_team": handle_configure_team,
 }
 
 

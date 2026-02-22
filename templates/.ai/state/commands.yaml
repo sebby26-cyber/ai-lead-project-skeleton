@@ -108,3 +108,42 @@ commands:
       - "session-memory-purge"
     handler: handle_session_memory_purge
     description: Purge session memory by namespace or age (advanced)
+
+  - name: spawn-workers
+    aliases:
+      - "/spawn-workers"
+      - "spawn worker bees"
+      - "spin up worker bees"
+      - "spin up worker bees for this task"
+      - "run tasks in parallel"
+      - "run tasks in parallel across departments"
+    handler: handle_spawn_workers
+    description: Generate worker prompts and spawn worker bees
+
+  - name: workers-status
+    aliases:
+      - "/workers-status"
+      - "show me what each worker is doing"
+      - "worker status"
+      - "worker bees status"
+    handler: handle_workers_status
+    description: Show current status of all worker bees
+
+  - name: stop-workers
+    aliases:
+      - "/stop-workers"
+      - "stop all workers"
+      - "stop workers"
+      - "pause workers"
+    handler: handle_stop_workers
+    description: Stop all active worker bees
+
+  - name: configure-team
+    aliases:
+      - "/configure-team"
+      - "set up my team"
+      - "set up worker bees"
+      - "set up worker bees for this project"
+      - "configure team"
+    handler: handle_configure_team
+    description: Parse team spec and write to team.yaml

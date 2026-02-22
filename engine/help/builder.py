@@ -164,14 +164,30 @@ def _build_prompt_categories(capabilities: dict | None = None) -> list[HelpCateg
             name="Parallel Work (Worker Bees)",
             icon="\U0001f41d",  # 🐝
             intents=[
-                HelpIntent("Spin up worker bees for this task", "orchestrator delegation"),
-                HelpIntent("Run tasks in parallel across departments", "orchestrator delegation"),
-                HelpIntent("Show me what each worker is doing", "ai status"),
-                HelpIntent("Summarize all worker outputs into one plan", "orchestrator merge"),
                 HelpIntent(
-                    "Set up worker bees for this project",
-                    "ai init (team onboarding)",
-                    description="Configure roles, count, and lanes",
+                    "Set up a team: 3 Codex devs + 1 Claude designer",
+                    "ai configure-team",
+                    description="Parses your spec, writes team.yaml with provider/model per role",
+                ),
+                HelpIntent(
+                    "Spawn worker bees",
+                    "ai spawn-workers",
+                    description="Generates role prompts, writes registry, prints CLI commands to run",
+                ),
+                HelpIntent(
+                    "Show me what each worker is doing",
+                    "ai workers-status",
+                    description="Reads worker registry and shows status per worker",
+                ),
+                HelpIntent(
+                    "Stop all workers",
+                    "ai stop-workers",
+                    description="Marks all workers as stopped in the registry",
+                ),
+                HelpIntent(
+                    "Use Codex for coding, Claude for design",
+                    "ai configure-team",
+                    description="Provider/model selection per role — stored in team.yaml",
                 ),
             ],
         ))
@@ -187,8 +203,8 @@ def _build_prompt_categories(capabilities: dict | None = None) -> list[HelpCateg
                 ),
                 HelpIntent(
                     "Set up worker bees for this project",
-                    "ai init (team onboarding)",
-                    description="Configure roles, count, and lanes",
+                    "ai configure-team",
+                    description="Configure roles, count, provider, and model",
                 ),
             ],
         ))

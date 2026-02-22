@@ -49,6 +49,8 @@ def render_help_terminal(guide: HelpGuide) -> str:
         lines.append(f"  {category.icon} {category.name}")
         for intent in category.intents:
             lines.append(f'    - "{intent.prompt}"')
+            if intent.description:
+                lines.append(f'      ({intent.description})')
         lines.append("")
 
     # ── Commands (SECONDARY — advanced) ──

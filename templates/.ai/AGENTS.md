@@ -94,6 +94,10 @@ If the user speaks naturally (no `/` prefix), match high-confidence intents:
 | "validate the project", "check if everything is working" | `/validate` |
 | "sync project state", "commit state", "sync to git" | `/git-sync` |
 | "resume where we left off" | `/run` |
+| "spawn worker bees", "spin up worker bees", "run tasks in parallel" | `/spawn-workers` |
+| "set up my team", "set up worker bees", "3 Codex devs and 1 Claude designer" | `/configure-team` |
+| "show me what each worker is doing", "worker status" | `/workers-status` |
+| "stop all workers", "stop workers" | `/stop-workers` |
 
 If confidence is low, respond:
 > "Use `/status` or `/help` for guaranteed execution."

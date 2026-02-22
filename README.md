@@ -118,7 +118,9 @@ Once active, just say what you need:
 - **"What's been completed and what's next?"** — task overview
 - **"Start or initialize the project"** — set up from scratch
 - **"Save current progress"** — export memory for continuity
-- **"Spin up worker bees for this task"** — run work in parallel
+- **"Set up a team: 3 Codex devs + 1 Claude designer"** — configure workers with provider/model
+- **"Spawn worker bees"** — activate workers in parallel
+- **"Show me what each worker is doing"** — check worker status
 - **"Validate the project"** — check state integrity
 - **"Help"** — see the full prompt guide
 
@@ -216,6 +218,17 @@ You interact using natural language. No commands to memorize. The orchestrator t
 | "Sync project state" | Commits canonical state to git |
 | "Validate the project" | Checks YAML integrity against schemas |
 | "Help" | Shows the full human prompt guide |
+
+**Worker bees:**
+
+| You say | What happens |
+|---------|-------------|
+| "Set up a team: 3 Codex devs + 1 Claude designer" | Parses spec, writes team.yaml with provider/model per role |
+| "Spawn worker bees" | Generates role prompts, writes registry, prints CLI commands |
+| "Show me what each worker is doing" | Shows worker status from registry |
+| "Stop all workers" | Marks workers as stopped |
+
+Under the hood, the system creates role tickets for each worker, generates a provider-specific prompt file, and gives you the exact CLI command to run per worker in a separate terminal.
 
 ---
 
