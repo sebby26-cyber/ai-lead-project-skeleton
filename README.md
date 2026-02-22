@@ -245,6 +245,14 @@ You interact using natural language. No commands to memorize. The orchestrator t
 
 Under the hood, the system creates role tickets for each worker, generates a provider-specific prompt file, and gives you the exact CLI command to run per worker in a separate terminal. State is auto-flushed on every task transition, worker change, and decision — no manual save needed.
 
+### Workers Don't Forget
+
+Worker progress is saved automatically via checkpoints and summaries in `.ai/workers/` (committed to git). If a worker hits token limits, stalls, or restarts, it resumes from its last checkpoint — not from scratch. Switching computers is safe because canonical worker state travels with the repo.
+
+```
+Checkpoint all workers, then show me what's pending.
+```
+
 ---
 
 ## Command Reference

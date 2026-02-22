@@ -133,7 +133,15 @@ def force_sync(project_root: Path, git_sync: bool = False) -> str:
         except Exception as e:
             results.append(f"Worker checkpoint failed: {e}")
 
-    # 4. Optional git-sync
+    # 4. Sync worker state to canonical (portable)
+    try:
+        from . import ai_worker_state
+        sync_msg = ai_worker_state.sync_from_runtime(project_root)
+        results.append(f"Worker state: {sync_msg}")
+    except Exception as e:
+        results.append(f"Worker state sync failed: {e}")
+
+    # 5. Optional git-sync
     if git_sync:
         from . import ai_git
         try:

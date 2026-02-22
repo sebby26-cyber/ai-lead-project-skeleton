@@ -200,3 +200,23 @@ commands:
       - "project boundaries"
     handler: handle_check_scope
     description: Show or check project scope boundaries
+
+  - name: checkpoint-workers
+    aliases:
+      - "/checkpoint-workers"
+      - "save worker progress"
+      - "save worker progress now"
+      - "checkpoint all workers"
+      - "checkpoint workers"
+    handler: handle_checkpoint_workers
+    description: Force checkpoint all active workers to canonical state
+
+  - name: show-checkpoints
+    aliases:
+      - "/show-checkpoints"
+      - "show me each worker's last checkpoint"
+      - "worker checkpoints"
+      - "show worker checkpoints"
+      - "what have workers done"
+    handler: handle_show_checkpoints
+    description: Show latest checkpoint per worker

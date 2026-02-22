@@ -73,6 +73,8 @@ Any user message starting with `/` is a **command**. Always.
 | `/workers-restart` | Restart a worker | `--worker_id` |
 | `/force-sync` | Force flush + checkpoint | `--git` |
 | `/scope` | Show project scope | |
+| `/checkpoint-workers` | Checkpoint all workers to canonical state | |
+| `/show-checkpoints` | Show latest checkpoint per worker | |
 
 ---
 
@@ -110,6 +112,8 @@ If the user speaks naturally (no `/` prefix), match high-confidence intents:
 | "stop all workers", "stop workers" | `/stop-workers` |
 | "resume stalled workers", "restart stuck worker" | `/workers-resume` |
 | "save everything now", "force sync", "update project state" | `/force-sync` |
+| "checkpoint all workers", "save worker progress" | `/checkpoint-workers` |
+| "show me each worker's last checkpoint", "worker checkpoints" | `/show-checkpoints` |
 | "what's in scope", "is this in scope", "add to scope" | `/scope` |
 
 The system uses an **intent router** (intents.yaml) that matches natural language variations.
@@ -162,6 +166,9 @@ The agent must understand two storage layers:
 | `.ai_runtime/session/memory.db` | Session memory (SQLite) |
 | `.ai_runtime/import_inbox/` | Drop memory packs here for auto-import |
 | `.ai_runtime/workers/checkpoints/` | Worker checkpoint data (auto-recovery) |
+| `.ai/workers/roster.yaml` | Canonical worker roster (portable across machines) |
+| `.ai/workers/checkpoints/` | Portable worker checkpoints (Markdown, committed) |
+| `.ai/workers/summaries/` | Per-worker state summaries (committed) |
 
 ---
 
@@ -215,8 +222,11 @@ To force a full sync: say "Save everything now" or run `/force-sync`.
 Workers can stall or hit token/context limits. The system handles this:
 
 - **Heartbeat monitoring** — detects silent workers after timeout.
-- **Checkpointing** — saves worker state to `.ai_runtime/workers/checkpoints/`.
-- **Resume** — builds a resume prompt from the last checkpoint.
+- **Checkpointing** — saves worker state to both `.ai_runtime/` (local detail) and `.ai/workers/checkpoints/` (portable, committed).
+- **Resume** — builds a resume prompt from the last checkpoint + worker summary.
 - **Max retries** — escalates to user after configured retry limit.
+- **Portable state** — canonical worker state (roster, checkpoints, summaries) lives in `.ai/workers/` and is committed to git, so workers can resume on any machine.
 
 Say "Resume stalled workers" or run `/workers-resume` to trigger recovery.
+Say "Checkpoint all workers" or run `/checkpoint-workers` to save progress.
+Say "Show me each worker's last checkpoint" to see what each worker has done.

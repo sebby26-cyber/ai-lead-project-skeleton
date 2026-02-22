@@ -90,7 +90,7 @@ intents:
   - id: pause_workers
     handler: handle_workers_pause
     aliases: ["/workers-pause", "workers-pause"]
-    keywords: [pause, checkpoint]
+    keywords: [pause]
     examples:
       - "Pause worker dev-1"
       - "Checkpoint and pause workers"
@@ -195,3 +195,24 @@ intents:
       - "Show project scope"
       - "Add this to project scope"
     category: guardrails
+
+  # ── Worker Persistence ──
+  - id: checkpoint_workers
+    handler: handle_checkpoint_workers
+    aliases: ["/checkpoint-workers", "checkpoint all workers", "checkpoint workers"]
+    keywords: ["checkpoint all", "save worker", "worker progress", "save progress"]
+    examples:
+      - "Checkpoint all workers"
+      - "Save worker progress now"
+      - "Save worker progress"
+    category: workers
+
+  - id: show_checkpoints
+    handler: handle_show_checkpoints
+    aliases: ["/show-checkpoints", "show checkpoints", "worker checkpoints"]
+    keywords: ["show checkpoint", "worker checkpoint", "last checkpoint", "what have workers done"]
+    examples:
+      - "Show me each worker's last checkpoint"
+      - "Worker checkpoints"
+      - "What have workers done?"
+    category: workers

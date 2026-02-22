@@ -43,6 +43,12 @@ def compute_canonical_hash(ai_dir: Path) -> str:
         fpath = state_dir / name
         if fpath.exists():
             h.update(fpath.read_bytes())
+    # Include canonical worker state
+    workers_dir = ai_dir / "workers"
+    for name in sorted(["roster.yaml", "assignments.yaml"]):
+        fpath = workers_dir / name
+        if fpath.exists():
+            h.update(fpath.read_bytes())
     return h.hexdigest()
 
 

@@ -47,6 +47,10 @@ def export_memory(
         except Exception:
             pass
 
+    # Check if canonical worker state exists
+    workers_dir = ai_dir / "workers"
+    worker_state_included = workers_dir.is_dir() and any(workers_dir.rglob("*"))
+
     # Write manifest
     manifest = {
         "version": "1.0",
@@ -54,6 +58,7 @@ def export_memory(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "skeleton_version": skeleton_version,
         "canonical_hash": canonical_hash,
+        "worker_state_included": worker_state_included,
     }
     (pack_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 

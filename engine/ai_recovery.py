@@ -136,27 +136,50 @@ def write_checkpoint(project_root: Path, worker_id: str, checkpoint_data: dict |
     cp_path = cp_dir / f"{checkpoint_id}.json"
     cp_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
+    # Also write canonical (portable) checkpoint
+    try:
+        from . import ai_worker_state
+        ai_worker_state.write_canonical_checkpoint(project_root, worker_id, data)
+    except Exception:
+        pass  # Non-critical — canonical checkpoint is best-effort
+
     return checkpoint_id
 
 
 def load_latest_checkpoint(project_root: Path, worker_id: str) -> dict | None:
-    """Load the most recent checkpoint for a worker. Returns None if no checkpoint."""
+    """Load the most recent checkpoint for a worker.
+
+    Tries runtime checkpoint first (JSON, has full detail).
+    Falls back to canonical checkpoint (Markdown, portable across machines).
+    Returns None if no checkpoint found anywhere.
+    """
+    # Try runtime first
     cp_dir = project_root / ".ai_runtime" / "workers" / "checkpoints" / worker_id
-    if not cp_dir.is_dir():
-        return None
+    if cp_dir.is_dir():
+        files = sorted(cp_dir.glob("*.json"), reverse=True)
+        if files:
+            try:
+                return json.loads(files[0].read_text())
+            except Exception:
+                pass
 
-    files = sorted(cp_dir.glob("*.json"), reverse=True)
-    if not files:
-        return None
-
+    # Fall back to canonical checkpoint (works on new machines)
     try:
-        return json.loads(files[0].read_text())
+        from . import ai_worker_state
+        canonical = ai_worker_state.load_latest_canonical_checkpoint(project_root, worker_id)
+        if canonical:
+            return canonical
     except Exception:
-        return None
+        pass
+
+    return None
 
 
 def build_resume_prompt(project_root: Path, worker_id: str) -> str:
-    """Read latest checkpoint + original prompt, build a resume prompt with context."""
+    """Read latest checkpoint + summary + original prompt, build a resume prompt.
+
+    Uses canonical state (portable) so this works on any machine.
+    """
     checkpoint = load_latest_checkpoint(project_root, worker_id)
 
     # Load original prompt
@@ -166,18 +189,43 @@ def build_resume_prompt(project_root: Path, worker_id: str) -> str:
         if prompt_path.exists():
             original_prompt = prompt_path.read_text()
 
+    # Load canonical summary for additional context
+    summary_text = ""
+    try:
+        from . import ai_worker_state
+        summary_text = ai_worker_state.load_summary(project_root, worker_id) or ""
+    except Exception:
+        pass
+
     lines = ["# RESUME SESSION\n"]
     lines.append("You are resuming a previous work session that was interrupted.\n")
 
     if checkpoint:
-        lines.append(f"## Previous State")
+        lines.append("## Previous State")
         lines.append(f"- Worker: {checkpoint.get('worker_id', '?')}")
         lines.append(f"- Role: {checkpoint.get('role', '?')}")
         lines.append(f"- Last checkpoint: {checkpoint.get('timestamp', '?')}")
         if checkpoint.get("progress_summary"):
             lines.append(f"- Progress: {checkpoint['progress_summary']}")
+        if checkpoint.get("completed"):
+            lines.append("- Completed:")
+            for item in checkpoint["completed"]:
+                lines.append(f"  - {item}")
+        if checkpoint.get("pending"):
+            lines.append("- Pending:")
+            for item in checkpoint["pending"]:
+                lines.append(f"  - {item}")
+        if checkpoint.get("files_changed"):
+            lines.append("- Files changed:")
+            for item in checkpoint["files_changed"]:
+                lines.append(f"  - {item}")
         if checkpoint.get("next_steps"):
             lines.append(f"- Next steps: {checkpoint['next_steps']}")
+        lines.append("")
+
+    if summary_text:
+        lines.append("## Worker Summary (Canonical)")
+        lines.append(summary_text)
         lines.append("")
 
     if original_prompt:
@@ -272,10 +320,24 @@ def pause_worker(project_root: Path, worker_id: str) -> str:
         if w.get("worker_id") == worker_id:
             w["status"] = "paused"
             _save_registry(registry, reg_path)
+            cp_id = None
             if config.get("checkpoint_enabled", True):
                 cp_id = write_checkpoint(project_root, worker_id, {
                     "progress_summary": "Paused by user",
                 })
+            # Update canonical summary
+            try:
+                from . import ai_worker_state
+                ai_worker_state.write_summary(project_root, worker_id, {
+                    "role": w.get("role", ""),
+                    "provider": w.get("provider", ""),
+                    "model": w.get("model", ""),
+                    "status": "paused",
+                    "last_checkpoint_id": cp_id or w.get("last_checkpoint_id"),
+                })
+            except Exception:
+                pass
+            if cp_id:
                 return f"Worker '{worker_id}' paused. Checkpoint: {cp_id}"
             return f"Worker '{worker_id}' paused."
 
@@ -311,6 +373,19 @@ def restart_worker(project_root: Path, worker_id: str) -> str:
     worker["status"] = "ready"
     worker["retry_count"] = 0
     _save_registry(registry, reg_path)
+
+    # Update canonical summary
+    try:
+        from . import ai_worker_state
+        ai_worker_state.write_summary(project_root, worker_id, {
+            "role": worker.get("role", ""),
+            "provider": worker.get("provider", ""),
+            "model": worker.get("model", ""),
+            "status": "ready",
+            "last_checkpoint_id": worker.get("last_checkpoint_id"),
+        })
+    except Exception:
+        pass
 
     # Get CLI command
     provider = worker.get("provider", "")

@@ -311,6 +311,66 @@ def handle_check_scope(project_root: Path, text: str = "", **kwargs) -> str:
     return f"Scope check: {label} — {result['reason']}"
 
 
+# ── Worker Persistence Handlers ──
+
+
+def handle_checkpoint_workers(project_root: Path, **kwargs) -> str:
+    """Force checkpoint all active workers to canonical state."""
+    from . import ai_worker_state
+
+    registry_path = project_root / ".ai_runtime" / "workers" / "registry.json"
+    if not registry_path.exists():
+        return "No workers to checkpoint. Spawn workers first."
+
+    import json
+    try:
+        registry = json.loads(registry_path.read_text())
+    except Exception:
+        return "Error reading worker registry."
+
+    workers = registry.get("workers", [])
+    checkpointed = 0
+    for w in workers:
+        if w.get("status") in ("ready", "running", "resuming"):
+            ai_recovery.write_checkpoint(project_root, w["worker_id"], {
+                "progress_summary": "User-requested checkpoint",
+            })
+            checkpointed += 1
+
+    # Sync to canonical
+    ai_worker_state.sync_from_runtime(project_root)
+
+    return f"Checkpointed {checkpointed} worker(s). Canonical state updated in .ai/workers/."
+
+
+def handle_show_checkpoints(project_root: Path, **kwargs) -> str:
+    """Show latest canonical checkpoint per worker."""
+    from . import ai_worker_state
+
+    roster = ai_worker_state.load_roster(project_root)
+    if not roster:
+        return "No workers in roster. Spawn workers first."
+
+    lines = [f"Worker Checkpoints ({len(roster)} worker(s)):\n"]
+    for w in roster:
+        wid = w.get("worker_id", "?")
+        cp = ai_worker_state.load_latest_canonical_checkpoint(project_root, wid)
+        if cp:
+            lines.append(f"  {wid} ({w.get('role', '?')})")
+            lines.append(f"    Checkpoint: {cp.get('checkpoint_id', '?')}")
+            lines.append(f"    Timestamp:  {cp.get('timestamp', '?')}")
+            if cp.get("progress_summary"):
+                lines.append(f"    Progress:   {cp['progress_summary']}")
+            if cp.get("next_steps"):
+                lines.append(f"    Next steps: {cp['next_steps']}")
+            lines.append("")
+        else:
+            lines.append(f"  {wid} ({w.get('role', '?')}) — no checkpoint yet")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
 # ── Command Registry ──
 
 
@@ -335,6 +395,8 @@ HANDLERS = {
     "handle_workers_restart": handle_workers_restart,
     "handle_force_sync": handle_force_sync,
     "handle_check_scope": handle_check_scope,
+    "handle_checkpoint_workers": handle_checkpoint_workers,
+    "handle_show_checkpoints": handle_show_checkpoints,
 }
 
 

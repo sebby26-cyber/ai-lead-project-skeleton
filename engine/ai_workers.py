@@ -349,33 +349,58 @@ def spawn_workers(project_root: Path) -> str:
     registry_path = registry_dir / "registry.json"
     registry_path.write_text(json.dumps(registry, indent=2, ensure_ascii=False))
 
+    # Write canonical state (portable, committed to git)
+    from . import ai_worker_state
+    ai_worker_state.write_roster(project_root, registry["workers"])
+    for w in workers:
+        ai_worker_state.write_summary(project_root, w["worker_id"], {
+            "role": w["role"],
+            "provider": w["provider"],
+            "model": w["model"],
+            "status": "ready",
+        })
+
     lines.append(f"Registry written to: {registry_path}")
+    lines.append("Canonical state written to: .ai/workers/")
     lines.append("\nRun the commands above in separate terminals to start each worker.")
 
     return "\n".join(lines)
 
 
 def get_worker_status(project_root: Path) -> str:
-    """Read worker registry and return formatted status."""
+    """Read worker registry and return formatted status.
+
+    Falls back to canonical roster if runtime registry is missing.
+    """
     registry_path = project_root / ".ai_runtime" / "workers" / "registry.json"
-    if not registry_path.exists():
-        return "No workers spawned yet. Say \"Spawn worker bees\" to start."
+    workers = []
+    spawned_at = "?"
 
-    try:
-        registry = json.loads(registry_path.read_text())
-    except Exception:
-        return "Error reading worker registry."
+    if registry_path.exists():
+        try:
+            registry = json.loads(registry_path.read_text())
+            workers = registry.get("workers", [])
+            spawned_at = registry.get("spawned_at", "?")
+        except Exception:
+            pass
 
-    workers = registry.get("workers", [])
+    # Fall back to canonical roster if no runtime registry
     if not workers:
-        return "Worker registry is empty."
+        from . import ai_worker_state
+        roster = ai_worker_state.load_roster(project_root)
+        if roster:
+            workers = roster
+            spawned_at = "(from canonical roster)"
+        else:
+            return "No workers spawned yet. Say \"Spawn worker bees\" to start."
 
     lines = [f"Worker Bees ({len(workers)}):\n"]
-    lines.append(f"  Spawned: {registry.get('spawned_at', '?')}\n")
+    lines.append(f"  Spawned: {spawned_at}\n")
 
     for w in workers:
-        lines.append(f"  {w['worker_id']} ({w['role']})")
-        lines.append(f"    Provider: {w['provider']} | Model: {w['model']}")
+        wid = w.get("worker_id", w.get("id", "?"))
+        lines.append(f"  {wid} ({w.get('role', '?')})")
+        lines.append(f"    Provider: {w.get('provider', '?')} | Model: {w.get('model', '?')}")
         status = w.get('status', '?')
         lines.append(f"    Status:   {status}")
         if w.get("last_heartbeat_at"):

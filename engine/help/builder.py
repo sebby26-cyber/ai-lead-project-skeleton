@@ -113,6 +113,10 @@ def generate_help(project_root: Path, adapter: dict | None = None) -> HelpGuide:
         HelpFileLocation(".ai_runtime/import_inbox/", "Drop memory packs here for auto-import"),
         HelpFileLocation(".ai_runtime/memory_packs/", "Auto-exported memory packs on exit"),
         HelpFileLocation(".ai_runtime/workers/checkpoints/", "Worker checkpoint data (auto-recovery)"),
+        HelpFileLocation(".ai/workers/", "Canonical worker state — roster, checkpoints, summaries (committed)"),
+        HelpFileLocation(".ai/workers/roster.yaml", "Worker roster (portable across machines)"),
+        HelpFileLocation(".ai/workers/checkpoints/", "Portable worker checkpoints (Markdown, human-readable)"),
+        HelpFileLocation(".ai/workers/summaries/", "Per-worker state summaries"),
     ]
 
     return HelpGuide(
@@ -187,6 +191,9 @@ def _build_prompt_categories(capabilities: dict | None = None, ai_dir: Path | No
                 ),
                 HelpIntent("Spawn worker bees", "ai spawn-workers"),
                 HelpIntent("Show me what each worker is doing", "ai workers-status"),
+                HelpIntent("Checkpoint all workers", "ai checkpoint-workers",
+                           description="Save worker progress to portable state"),
+                HelpIntent("Show me each worker's last checkpoint", "ai show-checkpoints"),
                 HelpIntent("Stop all workers", "ai stop-workers"),
             ],
         ),
