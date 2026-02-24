@@ -7,7 +7,8 @@
 
 ## 0. Submodule Protection (Invariant)
 
-The skeleton submodule (typically `vendor/scaffold-ai/`) is a **read-only system layer**.
+The skeleton submodule (typically `scaffold/scaffold-ai/`) is a **read-only system layer**.
+`vendor/` is reserved for language/package managers (for example Go vendoring), so system/framework submodules must not live there.
 
 **Rules (no exceptions, all agents):**
 - **NEVER** create, modify, or delete any file inside the submodule directory.
@@ -26,7 +27,7 @@ If you are about to write a file, resolve its absolute path first. If it falls i
 On every new session, do these steps in order:
 
 1. **Confirm repo root** — locate `.git/` to establish the project root.
-2. **Init submodules** — if `vendor/scaffold-ai/` exists but is empty, run `git submodule update --init --recursive`.
+2. **Init submodules** — if `scaffold/scaffold-ai/` exists but is empty, run `git submodule update --init --recursive`.
 3. **Locate canonical state** — verify `.ai/state/` exists. If not, run `ai init`.
 4. **Locate runtime** — verify `.ai_runtime/` exists. If not, run `ai init`.
 5. **Quick health check** — run `ai validate` to confirm YAML integrity.

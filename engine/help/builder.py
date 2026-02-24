@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..cli_commands import cli_example_for_alias, help_json_commands
+from ..submodule_paths import CANONICAL_SUBMODULE_PATH, SUBMODULE_POLICY_SUMMARY
 from .model import (
     HelpCategory,
     HelpCommand,
@@ -92,9 +93,10 @@ def generate_help(project_root: Path, adapter: dict | None = None) -> HelpGuide:
     troubleshooting = [
         'Status shows no tasks: run "ai rehydrate-db" then "ai status".',
         'Database out of sync: run "ai rehydrate-db" to rebuild from canonical YAML.',
-        '"ai" command not found: run via full path (python vendor/scaffold-ai/engine/ai).',
+        f'"ai" command not found: run via full path (python {CANONICAL_SUBMODULE_PATH}/engine/ai).',
         'YAML validation errors: run "ai validate" and fix reported issues.',
         ".ai_runtime/ accidentally committed: git rm -r --cached .ai_runtime/ and update .gitignore.",
+        SUBMODULE_POLICY_SUMMARY,
         "If I'm unsure about a capability, I consult the system layer (skeleton submodule) rather than guessing.",
     ]
 

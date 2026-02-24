@@ -29,8 +29,8 @@ Usage:
     ai memory purge [--ns NS]      Purge session memory
 
 Submodule usage:
-    python vendor/scaffold-ai/engine/ai init
-    python vendor/scaffold-ai/engine/ai status
+    python scaffold/scaffold-ai/engine/ai init
+    python scaffold/scaffold-ai/engine/ai status
 """
 
 import os
@@ -44,6 +44,7 @@ if skeleton_dir not in sys.path:
 
 from engine import ai_git, ai_init, ai_run
 from engine.cli_commands import cli_help_command_lines
+from engine.submodule_paths import CANONICAL_SUBMODULE_PATH
 
 
 def print_help():
@@ -57,15 +58,17 @@ Commands:
 Options:
   --help, -h                  Show this help message
   --non-interactive           Skip onboarding prompts during init
+  --migrate-submodule         Explicitly migrate legacy vendor/scaffold-ai during init
+  --dry-run                   Preview migration actions (use with init --migrate-submodule)
   --full                      Run full validation harness (with validate)
   --git                       Include git-sync in force-sync
 
 Examples (submodule usage):
-  python vendor/scaffold-ai/engine/ai init
-  python vendor/scaffold-ai/engine/ai status
-  python vendor/scaffold-ai/engine/ai validate --full
-  python vendor/scaffold-ai/engine/ai force-sync
-""".format(command_lines=command_lines))
+  python scaffold/scaffold-ai/engine/ai init
+  python scaffold/scaffold-ai/engine/ai status
+  python scaffold/scaffold-ai/engine/ai validate --full
+  python scaffold/scaffold-ai/engine/ai force-sync
+""".format(command_lines=command_lines, submodule_path=CANONICAL_SUBMODULE_PATH))
 
 
 def run_full_validation(project_root):
@@ -368,7 +371,16 @@ def main():
 
     if command == "init":
         interactive = "non_interactive" not in flags
-        ai_init.init(project_root, interactive=interactive)
+        try:
+            ai_init.init(
+                project_root,
+                interactive=interactive,
+                migrate_submodule=bool(flags.get("migrate_submodule")),
+                dry_run=bool(flags.get("dry_run")),
+            )
+        except ai_init.InitBlockedError as e:
+            print(str(e))
+            sys.exit(1)
 
     elif command == "run":
         ai_run.run_loop(project_root)

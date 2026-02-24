@@ -12,6 +12,8 @@ import subprocess
 from functools import lru_cache
 from pathlib import Path
 
+from .submodule_paths import CANONICAL_SUBMODULE_PATH
+
 
 class SubmoduleWriteError(Exception):
     """Raised when a write targets the read-only submodule layer."""
@@ -58,7 +60,7 @@ def detect_submodule_paths(project_root: Path) -> list[Path]:
 
     # Fallback: check common conventional paths
     if not paths:
-        for candidate in ("vendor/scaffold-ai", "skeleton", ".ai_submodules"):
+        for candidate in (CANONICAL_SUBMODULE_PATH, "skeleton", ".ai_submodules"):
             p = (project_root / candidate).resolve()
             if p.is_dir() and (p / ".git").exists():
                 paths.append(p)

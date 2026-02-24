@@ -13,12 +13,14 @@ The engine provides the CLI and runtime for Scaffold AI.
 
 This skeleton is designed to be used as a **git submodule** inside your project:
 
+`vendor/` is reserved for package-manager outputs (for example Go vendoring). Use `scaffold/scaffold-ai` as the canonical system-layer submodule path.
+
 ```bash
 # Add as submodule
-git submodule add <skeleton-repo-url> vendor/scaffold-ai
+git submodule add <skeleton-repo-url> scaffold/scaffold-ai
 
 # Or clone directly for standalone use
-git clone <skeleton-repo-url> vendor/scaffold-ai
+git clone <skeleton-repo-url> scaffold/scaffold-ai
 ```
 
 ## Usage
@@ -27,28 +29,52 @@ All commands are run from your **project root**, not the skeleton directory:
 
 ```bash
 # Initialize — creates .ai/ (canonical state) and .ai_runtime/ (local cache)
-python vendor/scaffold-ai/engine/ai init
+python scaffold/scaffold-ai/engine/ai init
 
 # Check status
-python vendor/scaffold-ai/engine/ai status
+python scaffold/scaffold-ai/engine/ai status
 
 # Start interactive orchestrator loop
-python vendor/scaffold-ai/engine/ai run
+python scaffold/scaffold-ai/engine/ai run
 
 # Export memory pack for portability
-python vendor/scaffold-ai/engine/ai export-memory --out pack.zip
+python scaffold/scaffold-ai/engine/ai export-memory --out pack.zip
 
 # Import memory pack on another machine
-python vendor/scaffold-ai/engine/ai import-memory --in pack.zip
+python scaffold/scaffold-ai/engine/ai import-memory --in pack.zip
 
 # Rebuild local DB from canonical YAML (if DB is corrupted or missing)
-python vendor/scaffold-ai/engine/ai rehydrate-db
+python scaffold/scaffold-ai/engine/ai rehydrate-db
 
 # Validate YAML files against schemas
-python vendor/scaffold-ai/engine/ai validate
+python scaffold/scaffold-ai/engine/ai validate
 
 # Commit only canonical state files to git
-python vendor/scaffold-ai/engine/ai git-sync
+python scaffold/scaffold-ai/engine/ai git-sync
+```
+
+## Migrating Existing Repos (legacy `vendor/scaffold-ai`)
+
+If an existing repo still uses `vendor/scaffold-ai`, the canonical path has moved to `scaffold/scaffold-ai` to avoid Go vendor collisions.
+
+```bash
+# Preview the migration (no changes)
+ai init --migrate-submodule --dry-run
+
+# Apply the migration (explicit + idempotent)
+ai init --migrate-submodule
+
+# Verify
+ai validate
+ai status
+```
+
+If the legacy submodule has local changes, preserve them first, then migrate manually:
+
+```bash
+git mv vendor/scaffold-ai scaffold/scaffold-ai
+git submodule sync -- scaffold/scaffold-ai
+python scaffold/scaffold-ai/engine/ai init
 ```
 
 ## Architecture
@@ -78,7 +104,7 @@ python vendor/scaffold-ai/engine/ai git-sync
 
 ```
 project-root/
-├── vendor/scaffold-ai/          # Scaffold AI (submodule)
+├── scaffold/scaffold-ai/          # Scaffold AI (submodule)
 │   ├── engine/
 │   │   ├── ai                   # CLI entrypoint
 │   │   ├── ai_init.py           # Initialization
@@ -115,7 +141,7 @@ project-root/
 Run the built-in sanity tests:
 
 ```bash
-python vendor/scaffold-ai/engine/self_check.py
+python scaffold/scaffold-ai/engine/self_check.py
 ```
 
 ## Extending

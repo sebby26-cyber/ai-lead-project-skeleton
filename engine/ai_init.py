@@ -8,6 +8,7 @@ stamps METADATA.yaml, and ingests canonical state into SQLite.
 from __future__ import annotations
 
 import shutil
+import subprocess
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,17 @@ except ImportError:
     yaml = None
 
 from . import ai_db, ai_git, ai_state
+from .submodule_paths import (
+    CANONICAL_SUBMODULE_PATH,
+    LEGACY_SUBMODULE_PATH,
+    SUBMODULE_POLICY_SUMMARY,
+    detect_submodule_layout,
+    relpath_from_project,
+)
+
+
+class InitBlockedError(RuntimeError):
+    """Raised when init detects a required explicit migration step."""
 
 
 def _yaml_dump(data: dict) -> str:
@@ -255,7 +267,126 @@ def run_onboarding(project_root: Path):
     print("\nOnboarding complete. Team and approval rules saved.")
 
 
-def init(project_root: Path | None = None, interactive: bool = True):
+def _legacy_migration_instructions(project_root: Path, dry_run: bool = False) -> str:
+    lines = [
+        "Legacy Scaffold AI submodule path detected at 'vendor/scaffold-ai'.",
+        f"Canonical path is now '{CANONICAL_SUBMODULE_PATH}'.",
+        SUBMODULE_POLICY_SUMMARY,
+        "",
+        "Migration options:",
+        "  1) Preview automated migration:",
+        "     ai init --migrate-submodule --dry-run",
+        "  2) Run automated migration:",
+        "     ai init --migrate-submodule",
+        "",
+        "Manual fallback (if you have local submodule changes):",
+        "  git status --porcelain vendor/scaffold-ai",
+        "  git mv vendor/scaffold-ai scaffold/scaffold-ai",
+        "  git submodule sync -- scaffold/scaffold-ai",
+        "  ai init",
+        "  ai validate",
+    ]
+    if dry_run:
+        lines.insert(0, "Dry-run requested.")
+    return "\n".join(lines)
+
+
+def _submodule_is_dirty(path: Path) -> tuple[bool, str]:
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(path),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return False, f"Could not inspect submodule status: {e}"
+    if result.returncode != 0:
+        return False, result.stderr.strip() or "git status failed"
+    return bool(result.stdout.strip()), result.stdout.strip()
+
+
+def _migrate_legacy_submodule(project_root: Path, dry_run: bool = False) -> str:
+    legacy = project_root / LEGACY_SUBMODULE_PATH
+    canonical = project_root / CANONICAL_SUBMODULE_PATH
+
+    if canonical.exists() and not legacy.exists():
+        return (
+            f"Submodule already uses canonical path '{CANONICAL_SUBMODULE_PATH}'. "
+            "No migration needed."
+        )
+    if not legacy.exists() and not canonical.exists():
+        return "No Scaffold AI submodule detected at legacy/canonical paths. Continuing without submodule migration."
+    if legacy.exists() and canonical.exists():
+        raise InitBlockedError(
+            "Both legacy and canonical Scaffold AI submodule paths exist.\n"
+            "Refusing automated migration to avoid destructive behavior.\n\n"
+            f"Legacy:    {LEGACY_SUBMODULE_PATH}\n"
+            f"Canonical: {CANONICAL_SUBMODULE_PATH}\n"
+            "Resolve manually, then rerun 'ai init'."
+        )
+
+    dirty, detail = _submodule_is_dirty(legacy)
+    if dirty:
+        raise InitBlockedError(
+            "Legacy submodule has local changes; refusing automated migration.\n"
+            "Preserve or commit/stash your submodule work first, then rerun.\n\n"
+            f"{detail}\n\n" + _legacy_migration_instructions(project_root)
+        )
+
+    lines = [
+        f"Submodule migration: {LEGACY_SUBMODULE_PATH} -> {CANONICAL_SUBMODULE_PATH}",
+    ]
+    if dry_run:
+        lines.extend([
+            "Dry-run only. Planned actions:",
+            f"  - mkdir -p {Path(CANONICAL_SUBMODULE_PATH).parent}",
+            f"  - git mv {LEGACY_SUBMODULE_PATH} {CANONICAL_SUBMODULE_PATH}",
+            f"  - git submodule sync -- {CANONICAL_SUBMODULE_PATH}",
+            "  - ai init (continue normal initialization and restamp metadata)",
+        ])
+        return "\n".join(lines)
+
+    canonical.parent.mkdir(parents=True, exist_ok=True)
+
+    mv_result = subprocess.run(
+        ["git", "mv", LEGACY_SUBMODULE_PATH, CANONICAL_SUBMODULE_PATH],
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+    )
+    if mv_result.returncode != 0:
+        raise InitBlockedError(
+            "Automated submodule migration failed during 'git mv'.\n"
+            f"{mv_result.stderr.strip() or mv_result.stdout.strip()}\n\n"
+            + _legacy_migration_instructions(project_root)
+        )
+
+    gitmodules = project_root / ".gitmodules"
+    if gitmodules.exists():
+        text = gitmodules.read_text()
+        if LEGACY_SUBMODULE_PATH in text:
+            gitmodules.write_text(text.replace(LEGACY_SUBMODULE_PATH, CANONICAL_SUBMODULE_PATH))
+
+    subprocess.run(
+        ["git", "submodule", "sync", "--", CANONICAL_SUBMODULE_PATH],
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+    )
+
+    lines.append("  [OK] Moved submodule path in git index/worktree")
+    lines.append("  [OK] Synced submodule config")
+    return "\n".join(lines)
+
+
+def init(
+    project_root: Path | None = None,
+    interactive: bool = True,
+    migrate_submodule: bool = False,
+    dry_run: bool = False,
+):
     """Full initialization sequence."""
     skeleton_dir = find_skeleton_dir()
 
@@ -264,6 +395,31 @@ def init(project_root: Path | None = None, interactive: bool = True):
 
     ai_dir = project_root / ".ai"
     runtime_dir = project_root / ".ai_runtime"
+
+    layout = detect_submodule_layout(project_root)
+    skeleton_rel = relpath_from_project(project_root, skeleton_dir)
+
+    if layout["legacy_exists"] and layout["canonical_exists"]:
+        raise InitBlockedError(
+            "Both legacy and canonical Scaffold AI submodule paths exist.\n"
+            f"Legacy:    {LEGACY_SUBMODULE_PATH}\n"
+            f"Canonical: {CANONICAL_SUBMODULE_PATH}\n"
+            "Resolve the duplicate before running init."
+        )
+
+    if layout["legacy_exists"]:
+        if migrate_submodule:
+            print(_migrate_legacy_submodule(project_root, dry_run=dry_run))
+            if dry_run:
+                return
+            skeleton_dir = (project_root / CANONICAL_SUBMODULE_PATH).resolve()
+            skeleton_rel = CANONICAL_SUBMODULE_PATH
+        elif skeleton_rel == LEGACY_SUBMODULE_PATH or skeleton_rel is None:
+            raise InitBlockedError(_legacy_migration_instructions(project_root))
+    elif migrate_submodule:
+        print(_migrate_legacy_submodule(project_root, dry_run=dry_run))
+        if dry_run:
+            return
 
     print(f"Initializing AI team in: {project_root}")
 

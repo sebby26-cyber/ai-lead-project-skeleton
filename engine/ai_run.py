@@ -120,6 +120,7 @@ def handle_migrate(project_root: Path, **kwargs) -> str:
     """Non-destructive template migration."""
     skeleton_dir = ai_init.find_skeleton_dir()
     ai_dir = project_root / ".ai"
+    from .submodule_paths import LEGACY_SUBMODULE_PATH, detect_submodule_layout
 
     ai_init.copy_templates(skeleton_dir, project_root)
     meta = ai_init.stamp_metadata(project_root, skeleton_dir)
@@ -131,6 +132,11 @@ def handle_migrate(project_root: Path, **kwargs) -> str:
         "  Existing files were NOT overwritten.",
         "  Run 'ai validate' to check schema compliance.",
     ]
+    if detect_submodule_layout(project_root)["legacy_exists"]:
+        lines.append(
+            f"  Legacy submodule path detected at '{LEGACY_SUBMODULE_PATH}'. "
+            "Run 'ai init --migrate-submodule --dry-run' then 'ai init --migrate-submodule'."
+        )
     return "\n".join(lines)
 
 
@@ -207,7 +213,7 @@ def handle_help(project_root: Path, **kwargs) -> str:
 
     if kwargs.get("json"):
         return render_help_json(guide)
-    return render_help_terminal(guide)
+    return render_help_terminal(guide, project_root=project_root)
 
 
 def handle_git_sync(project_root: Path, message: str | None = None, **kwargs) -> str:
@@ -377,7 +383,15 @@ def handle_show_checkpoints(project_root: Path, **kwargs) -> str:
 def handle_init(project_root: Path, **kwargs) -> str:
     """Initialize project (wrapper for ai_init.init)."""
     interactive = kwargs.get("interactive", False)
-    ai_init.init(project_root, interactive=interactive)
+    try:
+        ai_init.init(
+            project_root,
+            interactive=interactive,
+            migrate_submodule=bool(kwargs.get("migrate_submodule")),
+            dry_run=bool(kwargs.get("dry_run")),
+        )
+    except ai_init.InitBlockedError as e:
+        return str(e)
     return "Initialization complete."
 
 

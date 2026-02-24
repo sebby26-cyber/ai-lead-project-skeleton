@@ -97,7 +97,8 @@ You don't need to run commands. Just tell your AI what to do.
 If this is a new project or the system isn't set up yet, tell your AI:
 
 ```
-Pull the Scaffold AI skeleton from https://github.com/sebby26-cyber/scaffold-ai.git into this project as a submodule at vendor/scaffold-ai, then run its initializer to set up the .ai/ directory and runtime.
+Pull the Scaffold AI skeleton from https://github.com/sebby26-cyber/scaffold-ai.git into this project as a submodule at scaffold/scaffold-ai, then run its initializer to set up the .ai/ directory and runtime.
+`vendor/` is intentionally avoided because languages like Go use it for vendored dependencies (`go mod vendor`, auto-vendor mode, `vendor/modules.txt`).
 ```
 
 The AI will handle cloning, submodule setup, and initialization. No terminal required.
@@ -167,19 +168,19 @@ If you prefer terminal commands or need to set up CI/automation:
 
 ```bash
 # Add skeleton as a submodule
-git submodule add https://github.com/sebby26-cyber/scaffold-ai.git vendor/scaffold-ai
+git submodule add https://github.com/sebby26-cyber/scaffold-ai.git scaffold/scaffold-ai
 
 # Initialize (does not overwrite existing project files)
-python3 vendor/scaffold-ai/engine/ai init
+python3 scaffold/scaffold-ai/engine/ai init
 
 # Check project status
-python3 vendor/scaffold-ai/engine/ai status
+python3 scaffold/scaffold-ai/engine/ai status
 
 # Validate state files against schemas
-python3 vendor/scaffold-ai/engine/ai validate
+python3 scaffold/scaffold-ai/engine/ai validate
 
 # Context-aware help guide
-python3 vendor/scaffold-ai/engine/ai help
+python3 scaffold/scaffold-ai/engine/ai help
 ```
 
 The orchestrator loads `.ai/AGENTS.md` automatically at startup. Root bridge files (`AGENTS.md`, `CLAUDE.md`) are auto-read by Codex and Claude Code respectively, so AI tools inherit project identity on session start with zero setup.
@@ -188,10 +189,34 @@ Optional: create a wrapper script at your project root:
 
 ```bash
 #!/usr/bin/env bash
-exec python3 "$(dirname "$0")/vendor/scaffold-ai/engine/ai" "$@"
+exec python3 "$(dirname "$0")/scaffold/scaffold-ai/engine/ai" "$@"
 ```
 
 **Prerequisites:** Python 3.9+, PyYAML (`pip install pyyaml`), Git
+
+### Migrating Existing Repos (legacy `vendor/scaffold-ai`)
+
+Scaffold AI previously used `vendor/scaffold-ai`. That path now collides with Go vendoring semantics, so the canonical system-layer path is `scaffold/scaffold-ai`.
+
+```bash
+# Preview (no changes)
+ai init --migrate-submodule --dry-run
+
+# Apply (explicit, idempotent)
+ai init --migrate-submodule
+
+# Verify
+ai validate
+ai status
+```
+
+If the legacy submodule has local changes, preserve them first and migrate manually:
+
+```bash
+git mv vendor/scaffold-ai scaffold/scaffold-ai
+git submodule sync -- scaffold/scaffold-ai
+python3 scaffold/scaffold-ai/engine/ai init
+```
 
 ---
 
@@ -265,33 +290,49 @@ Checkpoint all workers, then show me what's pending.
 
 ## Example: Real-World Team Setup
 
-This is a real team structure you can deploy with a single prompt. Copy-paste the prompt below into your AI session to set up the full team.
+This is a real team structure you can deploy with a single prompt. The diagram below shows how roles, providers, and authority flow together.
 
 ```
-Orchestrator (Codex)
-|
-+-- codex-pm-tl-1            [PM / Tech Lead]         model: default
-|   authority: write (planning + execution coordination)
-|   |
-|   +-- codex-dev-a          [Rust Core Dev]          model: gpt-5.1-codex-mini
-|   |   scope: proto/**, internal/rust_core/**
-|   |
-|   +-- codex-dev-b          [Go Surface Dev]         model: gpt-5.1-codex-mini
-|   |   scope: cmd/**, daemon wiring, gRPC client integration
-|   |
-|   +-- codex-dev-c          [Docs + Tests Dev]       model: gpt-5.1-codex-mini
-|   |   scope: docs/blueprint/**, acceptance/parity test docs/scripts
-|   |
-|   +-- codex-dev-d          [General Dev / Support]  model: gpt-5.1-codex-mini
-|   |   scope: non-overlapping implementation slices as assigned
-|   |
-|   +-- codex-tester-1       [Tester]                 model: gpt-5.1-codex-mini
-|       scope: go test / smoke / acceptance / regression verification
-|
-+-- gemini-reviewer-1        [Independent Reviewer]   model: gemini-2.5-pro
-    authority: review-only (advisory, no coding)
-    reports_to: Orchestrator directly
-    scope: risk / regression / scope-drift / bloat analysis only
+╔══════════════════════════════════════════════════════════════╗
+║                     ORCHESTRATOR                             ║
+║                     Codex (default)                          ║
+╚═══════════════════════╦══════════════════════════════════════╝
+                        ║
+        ┌───────────────╨───────────────┐
+        │                               │
+  ┌─────┴──────────────────┐    ┌───────┴──────────────────┐
+  │  PM / TECH LEAD        │    │  INDEPENDENT REVIEWER    │
+  │  codex-pm-tl-1         │    │  gemini-reviewer-1       │
+  │                        │    │                          │
+  │  provider  Codex       │    │  provider  Gemini        │
+  │  model     default     │    │  model     gemini-2.5-pro│
+  │  authority WRITE       │    │  authority REVIEW-ONLY   │
+  └─────┬──────────────────┘    │  scope     risk/bloat/   │
+        │                       │            regression    │
+        │                       └──────────────────────────┘
+        │
+        │  ┌─────────────────────────────────────────────────┐
+        │  │              DEVELOPMENT TEAM                    │
+        │  │              All: Codex / gpt-5.1-codex-mini    │
+        │  ├─────────────────────────────────────────────────┤
+        ├──│  codex-dev-a     Rust Core Dev                  │
+        │  │                  scope: proto/**, rust_core/**  │
+        │  │                                                 │
+        ├──│  codex-dev-b     Go Surface Dev                 │
+        │  │                  scope: cmd/**, gRPC, daemon    │
+        │  │                                                 │
+        ├──│  codex-dev-c     Docs + Tests Dev               │
+        │  │                  scope: docs/blueprint/**       │
+        │  │                                                 │
+        └──│  codex-dev-d     General Dev / Support          │
+           │                  scope: as assigned             │
+           ├─────────────────────────────────────────────────┤
+           │              QUALITY                            │
+           ├─────────────────────────────────────────────────┤
+           │  codex-tester-1  Tester                         │
+           │                  scope: go test / smoke /       │
+           │                         acceptance / regression │
+           └─────────────────────────────────────────────────┘
 ```
 
 **Set up this team by pasting this prompt:**
@@ -354,6 +395,95 @@ Peer to PM/Tech Lead (independent, advisory only):
 
 The orchestrator will parse this into `team.yaml`, write the provider/model config, spawn all workers, and display their status. No commands to memorize.
 
+### Example: Large-Scale Multi-Provider Team (~80 workers)
+
+The same infographic style scales to production-grade teams. This example shows a real roster with tiered models, elastic reserves, and cross-provider advisory layers.
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║                          ORCHESTRATOR                               ║
+║                          authority: WRITE                           ║
+╚══════════════╦═══════════════════════╦═══════════════════════════════╝
+               ║                       ║
+  ┌────────────╨─────────────┐   ┌─────╨──────────────────────────────┐
+  │  ORCH ASSISTANTS         │   │  INDEPENDENT REVIEWER              │
+  │  codex-orch-helper-1..4  │   │  gemini-reviewer-1                 │
+  │                          │   │                                    │
+  │  Codex / gpt-5.1-mini   │   │  Gemini / gemini-2.5-pro           │
+  │  scope: repo sync,       │   │  authority: REVIEW-ONLY (advisory) │
+  │         hygiene, tests    │   │  scope: risk/regression/bloat      │
+  └──────────────────────────┘   └────────────────────────────────────┘
+
+  ┌───────────────────────────────────────────────────────────────────┐
+  │  PM / TECH LEAD                                                   │
+  │  codex-pm-tl-1                                                    │
+  │  Codex / gpt-5          authority: WRITE                         │
+  │  scope: planning, scope cuts, merge order, integration decisions  │
+  └───────────┬───────────────────────────────────────────────────────┘
+              │
+  ┌───────────┴───────────────────────────────────────────────────────┐
+  │                    CODEX WORKFORCE (under PM)                      │
+  ├───────────────────────────────────────────────────────────────────┤
+  │                                                                   │
+  │  SCOPE ASSISTANTS              gpt-5.1-codex-mini                │
+  │    codex-pm-scope-1..3         scope triage, anti-bloat checks   │
+  │                                                                   │
+  │  BASE DEVELOPERS               gpt-5.1-codex-mini                │
+  │    codex-dev-a..d              general implementation slices      │
+  │                                                                   │
+  │  CORE SCALE POOL               gpt-5.1-codex-mini                │
+  │    codex-dev-core-01..08       backend/core, daemon, internals   │
+  │                                                                   │
+  │  INTEGRATION SCALE POOL        gpt-5.1-codex-mini                │
+  │    codex-dev-int-01..08        wiring, glue code, integration    │
+  │                                                                   │
+  │  FEATURE SCALE POOL            gpt-5.1-codex-mini                │
+  │    codex-dev-feat-01..06       CLI/feature slices, user-facing   │
+  │                                                                   │
+  │  TESTERS                       gpt-5.1-codex-mini                │
+  │    codex-tester-1..5           test matrices, smoke, parity      │
+  │                                                                   │
+  │  SPECIALISTS (reasoning)       gpt-5.2                           │
+  │    codex-specialist-1..2       hard reasoning/debug (use sparingly)│
+  │                                                                   │
+  │  BLUEPRINT ARCHITECT           gpt-5                              │
+  │    codex-blueprint-1           docs architecture, consensus      │
+  │                                                                   │
+  │  ELASTIC RESERVE               gpt-5.1-codex-mini                │
+  │    codex-mini-reserve-01..20   ad hoc burst capacity, bounded    │
+  │                                                                   │
+  ├───────────────────────────────────────────────────────────────────┤
+  │                    GEMINI ADVISORY (under PM)                      │
+  ├───────────────────────────────────────────────────────────────────┤
+  │                                                                   │
+  │  PM VERIFICATION REVIEWER      gemini-2.5-pro                    │
+  │    gemini-reviewer-2           feasibility/scope review only     │
+  │                                                                   │
+  │  BLUEPRINT CONSENSUS           gemini-2.5-pro                    │
+  │    gemini-blueprint-1          docs debate/input only            │
+  │                                                                   │
+  │  RESEARCH                      gemini-2.5-pro                    │
+  │    gemini-research-1           research-only input               │
+  │                                                                   │
+  │  DEV POOL (bounded)            gemini-2.5-pro                    │
+  │    gemini-dev-01..20           low-trust, exact mechanical tasks  │
+  │                                                                   │
+  └───────────────────────────────────────────────────────────────────┘
+
+  MODEL ALLOCATION POLICY
+  ───────────────────────
+  gpt-5           PM lead, blueprint architect
+  gpt-5.2         specialist pair only (hard reasoning)
+  gpt-5.1-mini    bulk coding, tests, ops, helpers, reserve
+  gemini-2.5-pro  reviewers, research, bounded dev tasks
+
+  QUICK TOTALS
+  ─────────────
+  Codex PM lead ............  1     Codex gpt-5 blueprint ...  1
+  Codex gpt-5.2 specialists  2     Codex mini workers ...... ~55
+  Gemini reviewers/advisory   4     Gemini dev pool ......... 20
+```
+
 ---
 
 ## Command Reference
@@ -395,7 +525,7 @@ The orchestrator will parse this into `team.yaml`, write the provider/model conf
 ```bash
 git clone <your-project-repo>
 git submodule update --init --recursive
-python3 vendor/scaffold-ai/engine/ai init --non-interactive
+python3 scaffold/scaffold-ai/engine/ai init --non-interactive
 ```
 
 This rebuilds the local runtime from committed state. The orchestrator knows the current phase, task board, and decisions immediately.

@@ -49,7 +49,34 @@ To transfer context to another machine:
 This skeleton is designed to be used as a git submodule:
 
 ```bash
-git submodule add <repo-url> vendor/scaffold-ai
-python vendor/scaffold-ai/engine/ai init
-python vendor/scaffold-ai/engine/ai status
+git submodule add <repo-url> scaffold/scaffold-ai
+python scaffold/scaffold-ai/engine/ai init
+python scaffold/scaffold-ai/engine/ai status
+```
+
+`vendor/` is reserved for package-manager outputs (for example Go vendoring). Keep the Scaffold AI system layer under `scaffold/`, not `vendor/`.
+
+## Migration (legacy `vendor/scaffold-ai`)
+
+If your repo still uses the old legacy submodule path:
+
+```bash
+# Preview (no changes)
+ai init --migrate-submodule --dry-run
+
+# Apply (explicit, idempotent)
+ai init --migrate-submodule
+
+# Verify
+ai validate
+ai status
+```
+
+If the legacy submodule has local changes, automation will refuse to move it. In that case, preserve your changes first, then run:
+
+```bash
+git mv vendor/scaffold-ai scaffold/scaffold-ai
+git submodule sync -- scaffold/scaffold-ai
+ai init
+ai validate
 ```

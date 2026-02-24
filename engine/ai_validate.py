@@ -14,6 +14,12 @@ try:
 except ImportError:
     yaml = None
 
+from .submodule_paths import (
+    CANONICAL_SUBMODULE_PATH,
+    LEGACY_SUBMODULE_PATH,
+    SUBMODULE_POLICY_SUMMARY,
+)
+
 
 def _load_yaml(path: Path) -> dict:
     """Load a YAML file. Tries PyYAML first, falls back to basic parsing."""
@@ -125,6 +131,45 @@ def validate_submodule_integrity(project_root: Path) -> list[str]:
     return errors
 
 
+def validate_submodule_path_policy(project_root: Path) -> list[str]:
+    """Enforce canonical scaffold submodule path policy."""
+    errors: list[str] = []
+
+    gitmodules = project_root / ".gitmodules"
+    if gitmodules.exists():
+        text = gitmodules.read_text()
+        if LEGACY_SUBMODULE_PATH in text:
+            errors.append(
+                f"Legacy submodule path detected in .gitmodules: '{LEGACY_SUBMODULE_PATH}'. "
+                f"Use '{CANONICAL_SUBMODULE_PATH}' instead."
+            )
+
+    meta_path = project_root / ".ai" / "METADATA.yaml"
+    if meta_path.exists() and yaml is not None:
+        try:
+            meta = yaml.safe_load(meta_path.read_text()) or {}
+            if meta.get("submodule_path") == LEGACY_SUBMODULE_PATH:
+                errors.append(
+                    f".ai/METADATA.yaml submodule_path uses legacy path '{LEGACY_SUBMODULE_PATH}'. "
+                    f"Re-run init after migrating to '{CANONICAL_SUBMODULE_PATH}'."
+                )
+        except Exception as e:
+            errors.append(f"Failed to parse .ai/METADATA.yaml for submodule path policy: {e}")
+
+    legacy_dir = project_root / LEGACY_SUBMODULE_PATH
+    canonical_dir = project_root / CANONICAL_SUBMODULE_PATH
+    if legacy_dir.exists() and not canonical_dir.exists():
+        errors.append(
+            f"Legacy scaffold submodule directory exists at '{LEGACY_SUBMODULE_PATH}'. "
+            f"Run 'ai init --migrate-submodule --dry-run' to preview migration, then "
+            f"'ai init --migrate-submodule' to move it to '{CANONICAL_SUBMODULE_PATH}'."
+        )
+
+    if errors:
+        errors.append(SUBMODULE_POLICY_SUMMARY)
+    return errors
+
+
 def validate_all(
     ai_dir: Path,
     schemas_dir: Path,
@@ -182,6 +227,11 @@ def validate_all(
             results["submodule_integrity"] = sub_errors
         else:
             results["submodule_integrity"] = []
+        path_errors = validate_submodule_path_policy(project_root)
+        if path_errors:
+            results["submodule_path_policy"] = path_errors
+        else:
+            results["submodule_path_policy"] = []
 
     # Capabilities consistency check
     caps_errors = validate_capabilities_consistency(ai_dir)
